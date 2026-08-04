@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "Keys": {
+      "commandName": "Project",
+      "commandLineArgs": "keys C:\\Users\\MrX13\\AppData\\Local\\BeamNG\\BeamNG.drive\\current\\mods\\unpacked\\bug\\vehicles\\bug"
+    },
+    "Slot2": {
+      "commandName": "Project",
+      "commandLineArgs": "slots2 C:\\Users\\MrX13\\AppData\\Local\\BeamNG\\BeamNG.drive\\current\\mods\\unpacked\\bug\\vehicles\\bug"
+    }
+  }
+}
