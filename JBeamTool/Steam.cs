@@ -6,6 +6,17 @@ public static class Steam
 {
     public static string? GetRootFolder()
     {
+        if (OperatingSystem.IsWindows())
+            return GetRootFolderWindows();
+            
+        return null;
+    }
+
+    private static string? GetRootFolderWindows()
+    {
+        if (!OperatingSystem.IsWindows())
+            return null;
+
         // 1. Registry (best)
         using (var key = Registry.CurrentUser.OpenSubKey(@"Software\Valve\Steam"))
         {

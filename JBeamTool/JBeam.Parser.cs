@@ -1,10 +1,16 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection.Metadata.Ecma335;
 using System.Text;
+using Newtonsoft.Json.Linq;
 
-    
+
 partial class JBeam // AST
 {
+    public static int StringIndentation { get; set; } = 2;
+    protected static string Pad(int indent)
+        => new string(' ', indent * StringIndentation);
+
     public abstract class Node
     {
         public Node? Get(string key)
@@ -26,12 +32,25 @@ partial class JBeam // AST
         public Node? this[int index] => At(index);
 
         public string? ValueStr => ValueNode?.Value;
+
+        public override string ToString() => ToString(0);
+        public virtual string ToString(int indent)
+        {
+            string pad = Pad(indent);
+            return $"{pad}Node";
+        }
     }
 
     public class ValueNode : Node
     {
         public string Value { get; }
         public ValueNode(string value) => Value = value;
+
+        public override string ToString() => ToString(0);
+        public override string ToString(int indent)
+        {
+            return $"\"{Value}\"";
+        }
     }
 
     public class ArrayNode : Node
@@ -39,17 +58,125 @@ partial class JBeam // AST
         public List<Node> Items { get; } = new();
 
         public new Node? this[int index] => (index >= 0 && index < Items.Count) ? Items[index] : null;
+
+        public List<string> AsStringList()
+        {       
+            var list = new List<string>();
+            foreach (var item in Items)
+            {
+                list.Add(item.ValueStr ?? "");
+            }
+            return list;
+        }
+
+        public override string ToString() => ToString(0);
+        public override string ToString(int indent) => ToString(indent, 0);
+        private string ToString(int indent, int arrayLevel)
+        {
+            var sb = new StringBuilder();
+            string pad = Pad(indent);
+
+            var items = new List<string>();
+            var pendingRows = new List<List<string>>();
+            var colWidths = new List<int>();
+
+            void FlushPending()
+            {
+                foreach (var row in pendingRows)
+                {
+                    var padded = row.Select((c, i) => c.PadRight(colWidths[i]));
+                    items.Add($"[{string.Join(", ", padded)}]");
+                }
+
+                pendingRows.Clear();
+                colWidths.Clear();
+            }
+
+            foreach (var item in Items)
+            {
+                if (item is ArrayNode arr)
+                {
+                    var row = arr.Items
+                        .Select(sub => ToStringItem(sub, indent + 1, arrayLevel).Trim())
+                        .ToList();
+
+                    // Update column widths
+                    for (int i = 0; i < row.Count; i++)
+                    {
+                        if (colWidths.Count <= i)
+                            colWidths.Add(row[i].Length);
+                        else
+                            colWidths[i] = Math.Max(colWidths[i], row[i].Length);
+                    }
+
+                    pendingRows.Add(row);
+                }
+                else
+                {
+                    if (pendingRows.Count > 0)
+                        FlushPending();
+
+                    items.Add(ToStringItem(item, indent + 1, arrayLevel));
+                }
+            }
+
+            if (pendingRows.Count > 0)
+                FlushPending();
+
+            // Output formatting
+            return arrayLevel switch
+            {
+                < 1 => $"{pad}[\n{string.Join("\n", items.Select(i => $"{pad}  {i.Trim()},"))}\n{pad}]",
+                < 2 => $"{pad}[{string.Join(", ", items)}]\n",
+                _   => $"[{string.Join(", ", items)}]"
+            };
+        }
+
+        private static string ToStringItem(Node itemNode, int indent, int arrayLevel)
+        {
+            return itemNode is ArrayNode arr
+                ? arr.ToString(indent, arrayLevel + 1)
+                : itemNode.ToString(indent).Trim();
+        }
     }
 
     public class ObjectNode : Node
     {
         public Dictionary<string, Node> Properties { get; } = new();
+
+        public override string ToString() => ToString(0);
+        public override string ToString(int indent)
+        {
+            var sb = new StringBuilder();
+            string pad = Pad(indent);
+            sb.AppendLine($"{pad}{{");
+            sb.AppendJoin(",\n", ToStringItems(indent + 1));
+            sb.AppendLine();
+            sb.AppendLine($"{pad}}}");
+            return sb.ToString();
+        }
+
+        public IEnumerable<string> ToStringItems(int indent = 0)
+        {
+            string pad = Pad(indent);
+            foreach (var kv in Properties)
+            {
+                var value = kv.Value.ToString(indent).Trim();
+                yield return $"{pad}\"{kv.Key}\": {value}";
+            }
+        }
     }
 
-    public class JsonNode : Node
+    public class JsonNode : ObjectNode
     {
-        public string RawJson { get; }
-        public JsonNode(string rawJson) => RawJson = rawJson;
+        public override string ToString(int indent)
+        {
+            var sb = new StringBuilder();
+            sb.Append($"{{");
+            sb.AppendJoin(",", ToStringItems());
+            sb.Append($"}}");
+            return sb.ToString();
+        }
     }
 
 }
@@ -73,12 +200,19 @@ partial class JBeam // Lexer
         EOF
     }
 
-    public record Token(TokenType Type, string Value, int Position);
+    public record TextLocation(int Position, int Line, int Column)
+    {
+        public override string ToString()
+            => $"{Line}:{Column}[{Position}]";
+    }
+    public record Token(TokenType Type, string Value, TextLocation Location);
 
     public class Lexer
     {
         private readonly string _text;
         private int _pos;
+        private int _line = 1;
+        private int _column = 1;
 
         public Lexer(string text)
         {
@@ -86,9 +220,43 @@ partial class JBeam // Lexer
             _pos = 0;
         }
 
+        private TextLocation Location => new TextLocation(_pos, _line, _column);
         private char Current => _pos < _text.Length ? _text[_pos] : '\0';
+        private bool LineEnd => Current == '\r' || Current == '\n';
+        
+        private char Peek(int offset = 1)
+        {
+            int idx = _pos + offset;
+            return idx < _text.Length ? _text[idx] : '\0';
+        }
 
-        private void Advance() => _pos++;
+        private void Advance()
+        {
+            char c = Current;  
+            _pos++;
+
+            // Handle CRLF as a single newline
+            if (c == '\r')
+            {
+                if (Current == '\n')
+                    _pos++;         // consume LF as part of CRLF
+
+                _line++;
+                _column = 1;
+                return;
+            }
+
+            // Handle LF alone
+            if (c == '\n')
+            {
+                _line++;
+                _column = 1;
+                return;
+            }
+
+            // Normal character
+            _column++;
+        }
 
         private void SkipWhitespace()
         {
@@ -119,11 +287,11 @@ partial class JBeam // Lexer
         {
             SkipWhitespace();
 
-            int start = _pos;
+            TextLocation start = Location;
             char c = Current;
 
             if (c == '\0')
-                return new Token(TokenType.EOF, "", _pos);
+                return new Token(TokenType.EOF, "", Location);
 
             // Comments
             if (c == '/' && Peek() == '/')
@@ -176,14 +344,8 @@ partial class JBeam // Lexer
             if (IsIdentStart(c))
                 return LexIdent(start);
 
-            var snippet = _text.Substring(Math.Max(0, start - 10), Math.Min(20, _text.Length - start + 10));
+            var snippet = _text.Substring(Math.Max(0, start.Position - 10), Math.Min(20, _text.Length - start.Position + 10));
             throw new Exception($"Unexpected character '{c}' at {start}. Context: {snippet}");
-        }
-
-        private char Peek(int offset = 1)
-        {
-            int idx = _pos + offset;
-            return idx < _text.Length ? _text[idx] : '\0';
         }
 
         private bool IsIdentStart(char c) =>
@@ -192,7 +354,7 @@ partial class JBeam // Lexer
         private bool IsIdentPart(char c) =>
             char.IsLetterOrDigit(c) || c == '_' || c == '$';
 
-        private Token LexString(char startChar, int startPos)
+        private Token LexString(char startChar, TextLocation startPos)
         {
             Advance(); // skip " or <
             var sb = new StringBuilder();
@@ -220,7 +382,7 @@ partial class JBeam // Lexer
             return new Token(TokenType.String, sb.ToString(), startPos);
         }
 
-        private Token LexNumber(int startPos)
+        private Token LexNumber(TextLocation startPos)
         {
             var sb = new StringBuilder();
 
@@ -266,7 +428,7 @@ partial class JBeam // Lexer
             return new Token(TokenType.Number, sb.ToString(), startPos);
         }
 
-        private Token LexIdent(int startPos)
+        private Token LexIdent(TextLocation startPos)
         {
             var sb = new StringBuilder();
 
@@ -324,8 +486,8 @@ partial class JBeam // Parser
         {
             if (Current.Type != type)
             {
-                string lastFileLines = string.Join("\n", _tokens.GetRange(Math.Max(0, _index - 3), Math.Min(6, _tokens.Count - _index + 3)).ConvertAll(t => $"{t.Position}: {t.Type} '{t.Value}'"));
-                throw new Exception($"Expected {type} but found {Current.Type} at {Current.Position}\nContext:\n{lastFileLines}");
+                string lastFileLines = string.Join("\n", _tokens.GetRange(Math.Max(0, _index - 3), Math.Min(6, _tokens.Count - _index + 3)).ConvertAll(t => $"{t.Location}: {t.Type} '{t.Value}'"));
+                throw new Exception($"Expected {type} but found {Current.Type} at {Current.Location}\nContext:\n{lastFileLines}");
             }
 
             var t = Current;
@@ -343,15 +505,15 @@ partial class JBeam // Parser
             return false;
         }
 
-        public ObjectNode ParseFileAsObject()
+        public ObjectNode ParseFile()
         {
             // JBeam files are usually a single top-level object
             return ParseObject();
         }
 
-        private ObjectNode ParseObject()
+        private ObjectNode ParseObject(bool json = false)
         {
-            var obj = new ObjectNode();
+            var obj = json ? new JsonNode() : new ObjectNode();
             Consume(TokenType.LBrace);
 
             while (Current.Type != TokenType.RBrace && Current.Type != TokenType.EOF)
@@ -379,7 +541,7 @@ partial class JBeam // Parser
             {
                 TokenType.String   => Consume(Current.Type).Value,
                 TokenType.Bareword => Consume(Current.Type).Value,
-                _ => throw new Exception($"Invalid key token {Current.Type} at {Current.Position}")
+                _ => throw new Exception($"Invalid key token {Current.Type} at {Current.Location}")
             };
         }
 
@@ -395,7 +557,7 @@ partial class JBeam // Parser
                 TokenType.Bareword => new ValueNode(Consume(Current.Type).Value),
                 TokenType.LBracket => ParseArray(),
                 TokenType.LBrace   => ParseJsonOrObject(),
-                _ => throw new Exception($"Unexpected value token {Current.Type} at {Current.Position}")
+                _ => throw new Exception($"Unexpected value token {Current.Type} at {Current.Location}")
             };
         }
 
@@ -426,7 +588,7 @@ partial class JBeam // Parser
                     break;
 
                 // Anything else → error
-                throw new Exception($"Unexpected token {Current.Type} in array at {Current.Position}");
+                throw new Exception($"Unexpected token {Current.Type} in array at {Current.Location}");
             }
 
             Consume(TokenType.RBracket);
@@ -461,38 +623,7 @@ partial class JBeam // Parser
 
         private JsonNode CaptureJsonBlock()
         {
-            int startPos = _tokens[_index].Position; // position of '{'
-            int braceDepth = 0;
-            int startIndex = _index;
-
-            // Move through tokens until braces balanced
-            while (_index < _tokens.Count)
-            {
-                if (Current.Type == TokenType.LBrace)
-                    braceDepth++;
-                else if (Current.Type == TokenType.RBrace)
-                {
-                    braceDepth--;
-                    if (braceDepth == 0)
-                    {
-                        _index++; // consume final }
-                        break;
-                    }
-                }
-                _index++;
-            }
-
-            // Reconstruct raw text from token positions is tricky without original text,
-            // so simplest: store token slice as pseudo-JSON string.
-            var sb = new StringBuilder();
-            for (int i = startIndex; i < _index; i++)
-            {
-                sb.Append(_tokens[i].Value);
-                if (i + 1 < _index)
-                    sb.Append(' ');
-            }
-
-            return new JsonNode(sb.ToString());
+            return (JsonNode)ParseObject(true);
         }
     }
 
@@ -500,7 +631,7 @@ partial class JBeam // Parser
     {
         public static void DumpNode(Node node, int indent = 0)
         {
-            string pad = new string(' ', indent * 2);
+            string pad = Pad(indent);
 
             switch (node)
             {
@@ -517,6 +648,15 @@ partial class JBeam // Parser
                     }
                     break;
 
+                case JsonNode j:
+                    Console.WriteLine($"{pad}JsonBlock: ");
+                    foreach (var kv in j.Properties)
+                    {
+                        Console.WriteLine($"{pad}  {kv.Key}:");
+                        DumpNode(kv.Value, indent + 2);
+                    }
+                    break;
+
                 case ObjectNode o:
                     Console.WriteLine($"{pad}Object:");
                     foreach (var kv in o.Properties)
@@ -524,10 +664,6 @@ partial class JBeam // Parser
                         Console.WriteLine($"{pad}  {kv.Key}:");
                         DumpNode(kv.Value, indent + 2);
                     }
-                    break;
-
-                case JsonNode j:
-                    Console.WriteLine($"{pad}JsonBlock: {j.RawJson}");
                     break;
 
                 default:
@@ -543,7 +679,7 @@ partial class JBeam // Parser
         var tokens = lexer.LexAll();
 
         var parser = new Parser(tokens);
-        ObjectNode root = parser.ParseFileAsObject();
+        ObjectNode root = parser.ParseFile();
 
         return root;
     }

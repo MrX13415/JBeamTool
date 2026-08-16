@@ -10,6 +10,7 @@ partial class JBeam
         Slots,
         Slots2,
         Variables,
+        Flexbodies,
     }
 
     public class Section
@@ -31,8 +32,10 @@ partial class JBeam
             SectionType.Slots => new SlotsSection(node),
             SectionType.Slots2 => new SlotsSection(node),
             SectionType.Variables => new VariablesSection(node),
+            SectionType.Flexbodies => new FlexbodiesSection(node),
             _ => new Section(node)
         };
 
     }
+    
 }

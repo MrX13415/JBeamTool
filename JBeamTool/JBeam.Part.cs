@@ -37,6 +37,7 @@ partial class JBeam
         public SlotsSection? Slots => GetSection(SectionType.Slots) as SlotsSection 
                                    ?? GetSection(SectionType.Slots2) as SlotsSection;
         public VariablesSection? Variables => GetSection(SectionType.Variables) as VariablesSection;
+        public FlexbodiesSection? Flexbodies => GetSection(SectionType.Flexbodies) as FlexbodiesSection;
 
         public IEnumerable<TranslationKey> GetTranslationKeys()
         {

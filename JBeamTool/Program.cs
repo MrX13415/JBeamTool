@@ -1,16 +1,7 @@
 ﻿
-
-
-using System.Collections.Frozen;
-
 void Print(string message = "")
 {
     Console.WriteLine(message);
-}
-
-IEnumerable<string> GetJBeamFiles(string directory)
-{
-    return Directory.EnumerateFiles(directory, "*.jbeam", SearchOption.AllDirectories);
 }
 
 void Run_keys()
@@ -26,41 +17,70 @@ void Run_keys()
 
     Print($"Source: {sourceDir}");
 
-    List<JBeam.TranslationKey> translationKeys = new();
+    JBeam.OnLoadFile += (jbeam) => {
+        var relativePath = Path.GetRelativePath(sourceDir, jbeam.FilePath);
+        Print($"File: {relativePath} [{jbeam.Parts.Count} parts, {jbeam.GetTranslationKeys().Count()} translation keys]");
+        foreach (var warning in jbeam.GetWarnings())
+            Print($"   Warning: {warning}");
+    };
 
-    var files = GetJBeamFiles(sourceDir);    
-    foreach (var file in files)
+    var jbeams = JBeam.LoadPath(sourceDir);
+
+/*
+    Print("");
+    Print("Parts:");
+    foreach (var jbeam in jbeams)
     {
-        var relativePath = Path.GetRelativePath(sourceDir, file);
-        var content = File.ReadAllText(file);
-        
-        JBeam jBeam = new();
-        try
+        var relativePath = Path.GetRelativePath(sourceDir, jbeam.FilePath);
+        Print($"File: {relativePath}");
+        foreach (var part in jbeam.Parts)
         {
-            jBeam.LoadFile(content);
+            var partUIName = part.Information?.Name ?? "(unnamed)";
+            Print($"   Part: '{partUIName}' [{part.Name}]");
+            if (part.Slots != null)
+            {
+                foreach (var slot in part.Slots.Slots)
+                {
+                    Print($"      Slot: '{slot.Description}' [{slot.Name}]");
+                }
+            }
+            if (part.Variables != null)
+            {
+                foreach (var variable in part.Variables.Variables)
+                {
+                    Print($"      Variable: '{variable.Description}' ({variable.Name})");
+                }
+            }
+            if (part.Flexbodies != null)
+            {
+                foreach (var flexbody in part.Flexbodies.Flexbodies)
+                {
+                    List<string> details = new();
+                    if (flexbody.Groups.Count > 0) 
+                        details.Add($"Groups: {string.Join(", ", flexbody.Groups)}");
+                    if (flexbody.Json != null) 
+                        details.Add("Json: {...}");
 
-            var part = jBeam.Parts.First();
-            var information = part.Information;
-            var slots = part.Slots;
-
+                    Print($"      Flexbody: '{flexbody.Mesh}' ({string.Join(", ", details)})");
+                }
+            }
         }
-        catch (Exception ex)
-        {
-            Print($"Error parsing file: {file}");
-            Print($"   {ex.Message}");
-            Print($"   {ex.StackTrace}");
-            continue;
-        }
-
-        var keys = jBeam.GetTranslationKeys().ToList();
-        translationKeys.AddRange(keys);
-
-        Print($"File: {relativePath} [{jBeam.Parts.Count} parts, {keys.Count} translation keys]");
     }
+    */
 
-    translationKeys = JBeam.TranslationKey.MissingKeys(translationKeys);
+    /*
+    Print("");
+    Print("Parts:");
+    foreach (var jbeam in jbeams)
+    {
+        var relativePath = Path.GetRelativePath(sourceDir, jbeam.FilePath);
+        Print($"File: {relativePath}");
+        Print(jbeam.Root.ToString(3));
+    }*/
 
+    Print("");
     Print("Missing Translation Keys:");
+    var translationKeys = JBeam.TranslationKey.MissingKeys(jbeams);
     translationKeys.Sort((a, b) => string.Compare(a.Key, b.Key));
     foreach (var (key, value) in translationKeys.Distinct())
     {

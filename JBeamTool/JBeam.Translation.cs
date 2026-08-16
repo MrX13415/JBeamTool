@@ -3,6 +3,14 @@ using System.Text;
 
 partial class JBeam
 {
+
+    public IEnumerable<TranslationKey> GetTranslationKeys()
+    {
+        foreach (var part in Parts)
+            foreach (var key in part.GetTranslationKeys())
+                yield return key;
+    }
+
     public record TranslationKey(string Key, string Value)
     {
         public const string InformationName = "ui.vehicleconfig.information.name.";    
@@ -100,6 +108,11 @@ partial class JBeam
                 }
             }
             return missingKeys;
+        }
+        public static List<TranslationKey> MissingKeys(List<JBeam> jBeams)
+        {
+            var keys = jBeams.SelectMany(j => j.GetTranslationKeys()).ToList();
+            return MissingKeys(keys);
         }
 
     }

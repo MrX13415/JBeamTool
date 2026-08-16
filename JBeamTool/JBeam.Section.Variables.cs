@@ -1,6 +1,4 @@
 
-using System.Runtime.CompilerServices;
-
 partial class JBeam
 {
     
