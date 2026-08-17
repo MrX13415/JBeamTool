@@ -1,5 +1,7 @@
 using System.Data;
+using System.Reflection;
 using System.Reflection.Metadata;
+using System.Runtime.InteropServices;
 using System.Text;
 
 
@@ -42,6 +44,7 @@ partial class JBeam // AST
         return sb.ToString();
     }
     public static bool HasNewLine(string text) => text.Contains("\n") || text.Contains("\r");
+    public static bool IsLineEnd(char c) => c == '\n' || c == '\r';
 
     public enum ArrayFormat
     {
@@ -61,7 +64,7 @@ partial class JBeam // AST
         public StringFormat NextIndent() => this with { Indent = Indent + 1 };
         public StringFormat NextArray() => this with { ArrayFormat = ArrayFormat.Next() };
     }
-
+    public record class NodeString(string Str, Node Node);
 
     public abstract class Node
     {
@@ -73,7 +76,7 @@ partial class JBeam // AST
         public ObjectNode? GetObject(string key) => Get(key) as ObjectNode;
         public JsonNode? GetJson(string key) => Get(key) as JsonNode;
 
-
+        public CommentNode? CommentNode => (this is CommentNode comment) ? comment : null;
         public ValueNode? ValueNode => (this is ValueNode value) ? value : null;
         public ArrayNode? ArrayNode => (this is ArrayNode array) ? array : null;
         public ObjectNode? ObjectNode => (this is ObjectNode obj) ? obj : null;
@@ -84,6 +87,7 @@ partial class JBeam // AST
 
         public string? ValueStr => ValueNode?.Value;
 
+        public bool IsTrivia() => this is CommentNode || this is EmptyLineNode;
         public override string ToString() => ToString(new StringFormat());
         public virtual string ToString(StringFormat format) => base.ToString() ?? "";
     }
@@ -95,11 +99,22 @@ partial class JBeam // AST
 
         public override string ToString(StringFormat format)
         {
-            if (Value.Contains("6-Pack"))
-            {
-                bool lol = true;
-            }
             return $"\"{JsonEscape(Value)}\"";
+        }
+    }
+
+    public class EmptyLineNode : Node
+    {
+        public int Count { get; }
+
+        public EmptyLineNode(int count) => Count = Math.Min(count, 1);
+        public EmptyLineNode(string text) 
+            : this(text.Replace("\r\n", "\n").Count(IsLineEnd))
+        {}
+        
+        public override string ToString(StringFormat format)
+        {
+            return new string('\n', Count);
         }
     }
 
@@ -144,62 +159,76 @@ partial class JBeam // AST
             string subPad = format.Pad(1);
 
             var items = ToStringItems(format.NextIndent().NextArray()).ToList();
-            format.ArrayFormat = ArrayFormat.MultiLine;
+
             switch (format.ArrayFormat)
             {
                 case ArrayFormat.MultiLine:
                     sb.AppendLine($"{pad}[");
-                    sb.AppendJoin(",\n", items.Select(i => $"{subPad}{i.Trim()}"));
+                    sb.AppendJoin(items, 
+                        i => i.Node switch{ EmptyLineNode e => "", CommentNode o => "\n", _ => ",\n" }, 
+                        i => (i.Node is EmptyLineNode) ?  $"{i.Str}" : $"{subPad}{i.Str.Trim()}");
                     sb.AppendLine();
                     sb.AppendLine($"{pad}]");
                     break;
 
                 case ArrayFormat.SingleLine:
                     sb.Append($"{pad}[");
-                    sb.AppendJoin(", ", items);
+                    sb.AppendJoin(items, i => i.Node.IsTrivia() ? "" : ", ", i => i.Str);
                     sb.Append($"]");
                     break;
 
                 default:
                 case ArrayFormat.Inline:
                     sb.Append("[");
-                    sb.AppendJoin(", ", items);
+                    sb.AppendJoin(items, i => i.Node.IsTrivia() ? "" : ", ", i => i.Str);
                     sb.Append("]");
                     break;
             }
             
             return sb.ToString();
         }
-        public IEnumerable<string> ToStringItems(StringFormat format)
+        public IEnumerable<NodeString> ToStringItems(StringFormat format)
         {
-            var pendingRows = new List<List<(string Str, bool NewLine)>>();
+            var pendingRows = new List<(List<NodeString> Row, Node Node)>();
             var colWidths = new List<int>();
 
-            IEnumerable<string> FlushPending()
+            string RowString(List<NodeString> row)
+            {
+                var sb = new StringBuilder();
+
+                for (int colIndex = 0; colIndex < row.Count; colIndex++)
+                {
+                    var col = row[colIndex];
+                    var str = col.Str;
+
+                    if (colIndex >= 0 && colIndex < colWidths.Count)
+                        str = str.PadRight(colWidths[colIndex]);
+
+                    sb.Append(str);
+
+                    if (col.Node is EmptyLineNode emptyLine)
+                    {
+                        sb.Append(emptyLine.ToString(format));
+                    }
+                    else if (col.Node is CommentNode comment && comment.IsLine)
+                    {
+                        sb.AppendLine();
+                        sb.Append(format.Pad(1));
+                    }
+                    else if (colIndex < row.Count - 1)
+                    {
+                        sb.Append(", ");
+                    }
+                }
+
+                return $"[{sb.ToString().TrimEnd()}]";
+            }
+            IEnumerable<NodeString> FlushPending()
             {
                 if (pendingRows.Count == 0) yield break;
                 
                 foreach (var row in pendingRows)
-                {
-                    var sb = new StringBuilder();
-
-                    for (int colIndex = 0; colIndex < row.Count; colIndex++)
-                    {
-                        var col = row[colIndex];
-                        sb.Append(col.Str.PadRight(colWidths[colIndex]));
-                        if (col.NewLine)
-                        {
-                            sb.AppendLine();
-                            sb.Append(format.Pad(1));
-                        }
-                        else if (colIndex < row.Count - 1)
-                        {
-                            sb.Append(", ");
-                        }
-                    }
-
-                    yield return $"[{sb.ToString().TrimEnd()}]";
-                }
+                    yield return new NodeString(RowString(row.Row), row.Node);
 
                 pendingRows.Clear();
                 colWidths.Clear();
@@ -209,11 +238,8 @@ partial class JBeam // AST
             {
                 if (item is ArrayNode arr)
                 {
-                    List<(string Str, bool newline)> row = arr.Items
-                        .Select(sub =>
-                            (ToStringItem(sub, format).Trim(), 
-                            sub is CommentNode comment && comment.IsLine)
-                        ).ToList();
+                    List<NodeString> row = arr.Items
+                        .Select(sub => ToStringItem(sub, format, true)).ToList();
 
                     // Update column widths
                     for (int i = 0; i < row.Count; i++)
@@ -224,13 +250,13 @@ partial class JBeam // AST
                             colWidths[i] = Math.Max(colWidths[i], row[i].Str.Length);
                     }
 
-                    pendingRows.Add(row);
+                    pendingRows.Add((row, arr));
                 }
                 else
                 {
                     foreach (var pending in FlushPending())
                         yield return pending;
-                        
+
                     yield return ToStringItem(item, format);
                 }
             }
@@ -238,25 +264,19 @@ partial class JBeam // AST
             foreach (var pending in FlushPending())
                 yield return pending;
         }
-        private static string ToStringItem(Node itemNode, StringFormat format)
+        private static NodeString ToStringItem(Node itemNode, StringFormat format, bool trim = false)
         {
-
-            if (itemNode is ValueNode value && value.Value.Contains("lid_L_animated"))
-            {
-              return itemNode.ToString(format).Trim();
-            }
-
-
-            return itemNode is ArrayNode arr
+            var str = itemNode is ArrayNode arr
                 ? arr.ToString(format)
-                : itemNode.ToString(format).Trim();
+                : itemNode.ToString(format);
+            return new NodeString(trim ? str.Trim() : str, itemNode);
         }
     }
 
     public class ObjectNode : Node
     {
         public abstract record Key;
-        public record KeyComment : Key;
+        public record KeyTrivia : Key;
         public record KeyAnonymous : Key;
         public record KeyNamed(string Name) : Key;
         public record Entry(Key Key, Node Value);
@@ -272,8 +292,11 @@ partial class JBeam // AST
         public bool Add(Node? node)
         {
             if (node == null) return false;
-            if (node is CommentNode commentNode) Properties.Add(new Entry(new KeyComment(), commentNode));                
-            else Properties.Add(new Entry(new KeyAnonymous(), node));
+
+            if (node is EmptyLineNode || node is CommentNode) 
+                Properties.Add(new Entry(new KeyTrivia(), node));                
+            else 
+                Properties.Add(new Entry(new KeyAnonymous(), node));
             return true;
         }
 
@@ -297,39 +320,39 @@ partial class JBeam // AST
             if (items.Count == 0)
                 return $"{pad}{{}}";
 
-            if (items.Count == 1 && !HasNewLine(items[0]))
-                return $"{pad}{{{items[0].Trim()}}}";
+            if (items.Count == 1 && !HasNewLine(items[0].Str))
+                return $"{pad}{{{items[0].Str.Trim()}}}";
 
             sb.AppendLine($"{pad}{{");
-            sb.AppendJoin(",\n", items);
+            sb.AppendJoin(items, 
+                i => i.Node switch{ EmptyLineNode e => "", CommentNode o => "\n", _ => ",\n" }, 
+                i => i.Str);
             sb.AppendLine();
             sb.AppendLine($"{pad}}}");
             return sb.ToString();
         }
 
-        public IEnumerable<string> ToStringItems(StringFormat format)
+        public IEnumerable<NodeString> ToStringItems(StringFormat format)
         {
             string pad = format.Pad();
             foreach (var kv in Properties)
             {
                 switch(kv.Key)
                 {
-                    case KeyComment:
-                        if (kv.Value is CommentNode commentNode)
-                        {
-                            var comment = commentNode.ToString(format).Trim();
-                            yield return $"{pad}{comment}";
-                        }
+                    case KeyTrivia:
+                        yield return (kv.Value is EmptyLineNode)
+                            ? new NodeString($"{kv.Value.ToString(format).Trim()}", kv.Value)
+                            : new NodeString($"{pad}{kv.Value.ToString(format).Trim()}", kv.Value);
                         break;
-
+    
                     case KeyNamed namedKey:
                         var value = kv.Value.ToString(format).Trim();
-                        yield return $"{pad}\"{namedKey.Name}\": {value}";
+                        yield return new NodeString($"{pad}\"{namedKey.Name}\": {value}", kv.Value);
                         break;
 
                     case KeyAnonymous:
                         var anonValue = kv.Value.ToString(format).Trim();
-                        yield return $"{pad}{anonValue}";
+                        yield return new NodeString($"{pad}{anonValue}", kv.Value);
                         break;
                 }
             }
@@ -344,21 +367,18 @@ partial class JBeam // AST
             if (Properties.Any(p => p.Value is CommentNode comment && comment.IsLine))
                 return base.ToString(format);
 
-            var items = ToStringItems(format with { ArrayFormat = ArrayFormat.Inline }).Select(i => i.Trim()).ToList();
+            var items = ToStringItems(format with { ArrayFormat = ArrayFormat.Inline }).ToList();
 
             var sb = new StringBuilder();
             sb.Append($"{{");
-            sb.AppendJoin(", ", items);
+            sb.AppendJoin(items, 
+                i => i.Node.IsTrivia() ? "" : ", ", 
+                i => i.Str.Trim());
             sb.Append($"}}");
             return sb.ToString();
         }
     }
 
-}
-
-static class ArrayFormatExtensions
-{
-    public static JBeam.ArrayFormat Next(this JBeam.ArrayFormat format) => format < JBeam.ArrayFormat.Inline ? format + 1 : format;
 }
 
 partial class JBeam // Lexer
@@ -374,10 +394,11 @@ partial class JBeam // Lexer
         String,         // "foo" or <foo>
         Identifier,     // foo
         Number,         // 123, -0.5, 1e-3
-        Boolean,
+        Boolean,        // true, false
+        EmptyLine,      // \n\n
         CommentLine,    // // comment
         CommentBlock,   // /* comment */
-        Null,        
+        Null,           // null
         EOF
     }
 
@@ -402,9 +423,7 @@ partial class JBeam // Lexer
         }
 
         private TextLocation Location => new TextLocation(_pos, _line, _column);
-        private char Current => _pos < _text.Length ? _text[_pos] : '\0';
-        private bool LineEnd => Current == '\r' || Current == '\n';
-        
+        private char Current => Peek(0);
         private char Peek(int offset = 1)
         {
             int idx = _pos + offset;
@@ -439,10 +458,15 @@ partial class JBeam // Lexer
             _column++;
         }
 
-        private void SkipWhitespace()
+        private int SkipWhitespace()
         {
-            while (char.IsWhiteSpace(Current))
+            int line = _line;
+            while (true)
+            {
+                if (!char.IsWhiteSpace(Current)) break;
                 Advance();
+            }
+            return _line - line;
         }
 
         public List<Token> LexAll()
@@ -460,13 +484,17 @@ partial class JBeam // Lexer
 
         private Token NextToken()
         {
-            SkipWhitespace();
+            int linesSkipped = SkipWhitespace();
 
             TextLocation start = Location;
             char c = Current;
 
             if (c == '\0')
                 return new Token(TokenType.EOF, "", Location);
+
+            // Preserve empty lines
+            if (linesSkipped >= 2)
+                return new Token(TokenType.EmptyLine, new string('\n', linesSkipped), start);
 
             // Comments
             if (c == '/' && Peek() == '/')
@@ -708,6 +736,10 @@ partial class JBeam // Parser
 
             while (Current.Type != TokenType.RBrace && Current.Type != TokenType.EOF)
             {
+                // empty lines
+                if (obj.Add(ParseEmptyLine()))
+                    continue;
+
                 // comments
                 if (obj.Add(ParseComment()))
                     continue;
@@ -725,6 +757,13 @@ partial class JBeam // Parser
 
             Consume(TokenType.RBrace);
             return obj;
+        }
+
+        private Node? ParseEmptyLine()
+        {
+            if (Current.Type == TokenType.EmptyLine)
+                return new EmptyLineNode(Consume(TokenType.EmptyLine).Value);
+            return null;
         }
 
         private Node? ParseComment()
@@ -751,11 +790,12 @@ partial class JBeam // Parser
         {
             return Current.Type switch
             {
+                TokenType.EmptyLine     => new EmptyLineNode(Consume(TokenType.EmptyLine).Value),
+                TokenType.CommentLine   => new CommentNode(Consume(TokenType.CommentLine).Value, false),
+                TokenType.CommentBlock  => new CommentNode(Consume(TokenType.CommentBlock).Value, true),
                 TokenType.String        => new ValueNode(Consume(Current.Type).Value),
                 TokenType.Identifier    => new ValueNode(Consume(Current.Type).Value),
                 TokenType.Number        => new ValueNode(Consume(Current.Type).Value),
-                TokenType.CommentLine   => new CommentNode(Consume(TokenType.CommentLine).Value, false),
-                TokenType.CommentBlock  => new CommentNode(Consume(TokenType.CommentBlock).Value, true),
                 TokenType.Boolean       => new ValueNode(Consume(TokenType.Boolean).Value),
                 TokenType.Null          => new ValueNode(Consume(TokenType.Null).Value),
                 TokenType.LBracket      => ParseArray(),
@@ -807,6 +847,7 @@ partial class JBeam // Parser
                 type == TokenType.Boolean ||
                 type == TokenType.Null ||
                 type == TokenType.Identifier ||
+                type == TokenType.EmptyLine ||
                 type == TokenType.CommentLine ||
                 type == TokenType.CommentBlock ||
                 type == TokenType.LBracket ||
@@ -840,6 +881,49 @@ partial class JBeam // Parser
         ObjectNode root = parser.ParseFile();
 
         return root;
+    }
+
+}
+
+static class JBeamExtensions
+{
+    public static JBeam.ArrayFormat Next(this JBeam.ArrayFormat format) => format < JBeam.ArrayFormat.Inline ? format + 1 : format;
+
+    public static StringBuilder AppendJoin<T>(this StringBuilder sb, IEnumerable<T> values, Func<T, string?> separator)
+    {
+        bool first = true;
+        T? prev = default;
+
+        foreach (var current in values)
+        {
+            var s = first ? separator(prev!) : null;
+            if (!string.IsNullOrEmpty(s)) sb.Append(s);
+
+            sb.Append(current);
+            prev = current;
+            first = false;
+        }
+
+        return sb;
+    }
+
+    public static StringBuilder AppendJoin<T>(this StringBuilder sb, IEnumerable<T> values, Func<T, string?> separator, Func<T, string?> valueSelector)
+    {
+        bool first = true;
+        T? prev = default;
+
+        foreach (var current in values)
+        {
+            var s = !first ? separator(prev!) : null;
+            if (!string.IsNullOrEmpty(s)) sb.Append(s);
+
+            var v = valueSelector(current);
+            if (!string.IsNullOrEmpty(v)) sb.Append(v);
+            prev = current;
+            first = false;
+        }
+
+        return sb;
     }
 
 }

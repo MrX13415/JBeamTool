@@ -35,7 +35,7 @@ partial class JBeam
                     Parts.Add(new Part(new KeyedNode(key.Name, obj)));
                 else if (kv.Value is ObjectNode)
                     Warn($"Top-level key '{kv.Key}' is {kv.Key.GetType().Name} and will be ignored.");
-                else
+                else if (kv.Value is not EmptyLineNode)
                     Warn($"Top-level key '{kv.Key}' is not an object and will be ignored.");
             }
 
