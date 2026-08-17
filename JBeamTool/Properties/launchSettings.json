@@ -4,6 +4,10 @@
       "commandName": "Project",
       "commandLineArgs": "keys C:\\Users\\MrX13\\AppData\\Local\\BeamNG\\BeamNG.drive\\current\\mods\\unpacked\\bug\\vehicles\\bug"
     },
+    "Dump": {
+      "commandName": "Project",
+      "commandLineArgs": "dump C:\\Users\\MrX13\\AppData\\Local\\BeamNG\\BeamNG.drive\\current\\mods\\unpacked\\bug\\vehicles\\bug output"
+    },
     "Slot2": {
       "commandName": "Project",
       "commandLineArgs": "slots2 C:\\Users\\MrX13\\AppData\\Local\\BeamNG\\BeamNG.drive\\current\\mods\\unpacked\\bug\\vehicles\\bug"
