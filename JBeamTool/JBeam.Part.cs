@@ -25,8 +25,11 @@ partial class JBeam
             List<Section> sections = new();
             foreach (var kv in Object().Properties)
             {
-                var section = Section.New(new KeyedNode(kv.Key, kv.Value));
-                sections.Add(section);
+                if (kv.Key is ObjectNode.KeyNamed key)
+                {
+                    var section = Section.New(new KeyedNode(key.Name, kv.Value));
+                    sections.Add(section);
+                }
             }
             return sections;
         }

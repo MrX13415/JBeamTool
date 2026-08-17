@@ -68,14 +68,18 @@ void Run_keys()
     }
     */
 
-    /*
-    Print("");
+    
+    /*Print("");
     Print("Parts:");
     foreach (var jbeam in jbeams)
     {
         var relativePath = Path.GetRelativePath(sourceDir, jbeam.FilePath);
         Print($"File: {relativePath}");
-        Print(jbeam.Root.ToString(3));
+
+        var content = jbeam.Root.ToString();
+        var newFile = Path.GetFullPath(Path.Combine(".", "output", relativePath));
+        Directory.CreateDirectory(Path.GetDirectoryName(newFile)!);
+        File.WriteAllText(newFile, content);
     }*/
 
     Print("");

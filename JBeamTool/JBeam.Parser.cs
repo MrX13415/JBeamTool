@@ -1,20 +1,71 @@
-using System;
-using System.Collections.Generic;
-using System.Reflection.Metadata.Ecma335;
+using System.Data;
+using System.Reflection.Metadata;
 using System.Text;
-using Newtonsoft.Json.Linq;
 
 
 partial class JBeam // AST
 {
-    public static int StringIndentation { get; set; } = 2;
-    protected static string Pad(int indent)
-        => new string(' ', indent * StringIndentation);
+    public static readonly Dictionary<string, char> JsonEscapeMap = new()
+    {
+        [@"\"""] = '"',
+        [@"\\"] = '\\',
+        [@"\b"] = '\b',
+        [@"\f"] = '\f',
+        [@"\n"] = '\n',
+        [@"\r"] = '\r',
+        [@"\t"] = '\t'
+    };
+    public static string JsonEscape(string str)
+    { 
+        if (str == null)
+            return "";
+
+        // Escape tokens found, assume string is already escaped.
+        // Notice: This does not check \uXXXX sequences!
+        if (JsonEscapeMap.Any(kv => str.Contains(kv.Key)))
+            return str;
+
+        var sb = new StringBuilder(str.Length + 10);
+        for(int i = 0; i < str.Length; i++)
+        {
+            char c = str[i];
+            
+            var token = JsonEscapeMap.FirstOrDefault(kv => kv.Value == c);
+            if (token.Key != null)
+                sb.Append(token.Key);
+            else if (c < 0x20)
+                sb.Append("u").Append(((int)c).ToString("x4"));
+            else
+                sb.Append(c);
+        }
+
+        return sb.ToString();
+    }
+    public static bool HasNewLine(string text) => text.Contains("\n") || text.Contains("\r");
+
+    public enum ArrayFormat
+    {
+        MultiLine = 0,
+        SingleLine = 1,
+        Inline = 2
+    }
+
+    public record class StringFormat
+    {
+        public int IndentSize { get; set; } = 2;
+        public int Indent { get; set; } = 0;
+        public ArrayFormat ArrayFormat { get; set; } = ArrayFormat.MultiLine;        
+
+        public string Pad(int offset = 0) => new string(' ', (Indent + offset) * IndentSize);
+
+        public StringFormat NextIndent() => this with { Indent = Indent + 1 };
+        public StringFormat NextArray() => this with { ArrayFormat = ArrayFormat.Next() };
+    }
+
 
     public abstract class Node
     {
-        public Node? Get(string key)
-            => (this is ObjectNode obj && obj.Properties.TryGetValue(key, out var value)) ? value : null;
+        public Node? Get(string key) => ObjectNode?.GetEntry(key)?.Value;
         public Node? this[string key] => Get(key);
 
         public ValueNode? GetValue(string key) => Get(key) as ValueNode;
@@ -33,12 +84,8 @@ partial class JBeam // AST
 
         public string? ValueStr => ValueNode?.Value;
 
-        public override string ToString() => ToString(0);
-        public virtual string ToString(int indent)
-        {
-            string pad = Pad(indent);
-            return $"{pad}Node";
-        }
+        public override string ToString() => ToString(new StringFormat());
+        public virtual string ToString(StringFormat format) => base.ToString() ?? "";
     }
 
     public class ValueNode : Node
@@ -46,10 +93,31 @@ partial class JBeam // AST
         public string Value { get; }
         public ValueNode(string value) => Value = value;
 
-        public override string ToString() => ToString(0);
-        public override string ToString(int indent)
+        public override string ToString(StringFormat format)
         {
-            return $"\"{Value}\"";
+            if (Value.Contains("6-Pack"))
+            {
+                bool lol = true;
+            }
+            return $"\"{JsonEscape(Value)}\"";
+        }
+    }
+
+    public class CommentNode : Node
+    {
+        public string Comment { get; }
+        public bool IsBlock { get; }
+        public bool IsLine => !IsBlock;
+
+        public CommentNode(string comment, bool isBlock = false)
+        { 
+            Comment = comment; 
+            IsBlock = isBlock || HasNewLine(comment); 
+        }
+
+        public override string ToString(StringFormat format)
+        {
+            return IsBlock ? $"/* {Comment} */" : $"// {Comment}";
         }
     }
 
@@ -69,23 +137,68 @@ partial class JBeam // AST
             return list;
         }
 
-        public override string ToString() => ToString(0);
-        public override string ToString(int indent) => ToString(indent, 0);
-        private string ToString(int indent, int arrayLevel)
+        public override string ToString(StringFormat format)
         {
             var sb = new StringBuilder();
-            string pad = Pad(indent);
+            string pad = format.Pad();
+            string subPad = format.Pad(1);
 
-            var items = new List<string>();
-            var pendingRows = new List<List<string>>();
+            var items = ToStringItems(format.NextIndent().NextArray()).ToList();
+            format.ArrayFormat = ArrayFormat.MultiLine;
+            switch (format.ArrayFormat)
+            {
+                case ArrayFormat.MultiLine:
+                    sb.AppendLine($"{pad}[");
+                    sb.AppendJoin(",\n", items.Select(i => $"{subPad}{i.Trim()}"));
+                    sb.AppendLine();
+                    sb.AppendLine($"{pad}]");
+                    break;
+
+                case ArrayFormat.SingleLine:
+                    sb.Append($"{pad}[");
+                    sb.AppendJoin(", ", items);
+                    sb.Append($"]");
+                    break;
+
+                default:
+                case ArrayFormat.Inline:
+                    sb.Append("[");
+                    sb.AppendJoin(", ", items);
+                    sb.Append("]");
+                    break;
+            }
+            
+            return sb.ToString();
+        }
+        public IEnumerable<string> ToStringItems(StringFormat format)
+        {
+            var pendingRows = new List<List<(string Str, bool NewLine)>>();
             var colWidths = new List<int>();
 
-            void FlushPending()
+            IEnumerable<string> FlushPending()
             {
+                if (pendingRows.Count == 0) yield break;
+                
                 foreach (var row in pendingRows)
                 {
-                    var padded = row.Select((c, i) => c.PadRight(colWidths[i]));
-                    items.Add($"[{string.Join(", ", padded)}]");
+                    var sb = new StringBuilder();
+
+                    for (int colIndex = 0; colIndex < row.Count; colIndex++)
+                    {
+                        var col = row[colIndex];
+                        sb.Append(col.Str.PadRight(colWidths[colIndex]));
+                        if (col.NewLine)
+                        {
+                            sb.AppendLine();
+                            sb.Append(format.Pad(1));
+                        }
+                        else if (colIndex < row.Count - 1)
+                        {
+                            sb.Append(", ");
+                        }
+                    }
+
+                    yield return $"[{sb.ToString().TrimEnd()}]";
                 }
 
                 pendingRows.Clear();
@@ -96,84 +209,146 @@ partial class JBeam // AST
             {
                 if (item is ArrayNode arr)
                 {
-                    var row = arr.Items
-                        .Select(sub => ToStringItem(sub, indent + 1, arrayLevel).Trim())
-                        .ToList();
+                    List<(string Str, bool newline)> row = arr.Items
+                        .Select(sub =>
+                            (ToStringItem(sub, format).Trim(), 
+                            sub is CommentNode comment && comment.IsLine)
+                        ).ToList();
 
                     // Update column widths
                     for (int i = 0; i < row.Count; i++)
                     {
                         if (colWidths.Count <= i)
-                            colWidths.Add(row[i].Length);
+                            colWidths.Add(row[i].Str.Length);
                         else
-                            colWidths[i] = Math.Max(colWidths[i], row[i].Length);
+                            colWidths[i] = Math.Max(colWidths[i], row[i].Str.Length);
                     }
 
                     pendingRows.Add(row);
                 }
                 else
                 {
-                    if (pendingRows.Count > 0)
-                        FlushPending();
-
-                    items.Add(ToStringItem(item, indent + 1, arrayLevel));
+                    foreach (var pending in FlushPending())
+                        yield return pending;
+                        
+                    yield return ToStringItem(item, format);
                 }
             }
 
-            if (pendingRows.Count > 0)
-                FlushPending();
-
-            // Output formatting
-            return arrayLevel switch
-            {
-                < 1 => $"{pad}[\n{string.Join("\n", items.Select(i => $"{pad}  {i.Trim()},"))}\n{pad}]",
-                < 2 => $"{pad}[{string.Join(", ", items)}]\n",
-                _   => $"[{string.Join(", ", items)}]"
-            };
+            foreach (var pending in FlushPending())
+                yield return pending;
         }
-
-        private static string ToStringItem(Node itemNode, int indent, int arrayLevel)
+        private static string ToStringItem(Node itemNode, StringFormat format)
         {
+
+            if (itemNode is ValueNode value && value.Value.Contains("lid_L_animated"))
+            {
+              return itemNode.ToString(format).Trim();
+            }
+
+
             return itemNode is ArrayNode arr
-                ? arr.ToString(indent, arrayLevel + 1)
-                : itemNode.ToString(indent).Trim();
+                ? arr.ToString(format)
+                : itemNode.ToString(format).Trim();
         }
     }
 
     public class ObjectNode : Node
     {
-        public Dictionary<string, Node> Properties { get; } = new();
+        public abstract record Key;
+        public record KeyComment : Key;
+        public record KeyAnonymous : Key;
+        public record KeyNamed(string Name) : Key;
+        public record Entry(Key Key, Node Value);
 
-        public override string ToString() => ToString(0);
-        public override string ToString(int indent)
+        public List<Entry> Properties { get; } = new();
+
+        public bool Add(string key, Node? value)
+        {
+            if (value == null) return false;
+            Properties.Add(new Entry(new KeyNamed(key), value));
+            return true;
+        }
+        public bool Add(Node? node)
+        {
+            if (node == null) return false;
+            if (node is CommentNode commentNode) Properties.Add(new Entry(new KeyComment(), commentNode));                
+            else Properties.Add(new Entry(new KeyAnonymous(), node));
+            return true;
+        }
+
+        public List<Entry> PropertiesNamed => Properties.Where(entry => entry.Key is KeyNamed).ToList();
+        public Entry? GetEntry(string key)
+        {
+            foreach (var entry in Properties)
+            {
+                if (entry.Key is KeyNamed named && named.Name == key)
+                    return entry;
+            }
+            return null;
+        }
+
+        public override string ToString(StringFormat format)
         {
             var sb = new StringBuilder();
-            string pad = Pad(indent);
+            string pad = format.Pad();
+            var items = ToStringItems(format.NextIndent()).ToList();
+
+            if (items.Count == 0)
+                return $"{pad}{{}}";
+
+            if (items.Count == 1 && !HasNewLine(items[0]))
+                return $"{pad}{{{items[0].Trim()}}}";
+
             sb.AppendLine($"{pad}{{");
-            sb.AppendJoin(",\n", ToStringItems(indent + 1));
+            sb.AppendJoin(",\n", items);
             sb.AppendLine();
             sb.AppendLine($"{pad}}}");
             return sb.ToString();
         }
 
-        public IEnumerable<string> ToStringItems(int indent = 0)
+        public IEnumerable<string> ToStringItems(StringFormat format)
         {
-            string pad = Pad(indent);
+            string pad = format.Pad();
             foreach (var kv in Properties)
             {
-                var value = kv.Value.ToString(indent).Trim();
-                yield return $"{pad}\"{kv.Key}\": {value}";
+                switch(kv.Key)
+                {
+                    case KeyComment:
+                        if (kv.Value is CommentNode commentNode)
+                        {
+                            var comment = commentNode.ToString(format).Trim();
+                            yield return $"{pad}{comment}";
+                        }
+                        break;
+
+                    case KeyNamed namedKey:
+                        var value = kv.Value.ToString(format).Trim();
+                        yield return $"{pad}\"{namedKey.Name}\": {value}";
+                        break;
+
+                    case KeyAnonymous:
+                        var anonValue = kv.Value.ToString(format).Trim();
+                        yield return $"{pad}{anonValue}";
+                        break;
+                }
             }
         }
     }
 
     public class JsonNode : ObjectNode
     {
-        public override string ToString(int indent)
+        public override string ToString(StringFormat format)
         {
+            // fallback to normal formatting if line comments are present
+            if (Properties.Any(p => p.Value is CommentNode comment && comment.IsLine))
+                return base.ToString(format);
+
+            var items = ToStringItems(format with { ArrayFormat = ArrayFormat.Inline }).Select(i => i.Trim()).ToList();
+
             var sb = new StringBuilder();
             sb.Append($"{{");
-            sb.AppendJoin(",", ToStringItems());
+            sb.AppendJoin(", ", items);
             sb.Append($"}}");
             return sb.ToString();
         }
@@ -181,22 +356,28 @@ partial class JBeam // AST
 
 }
 
+static class ArrayFormatExtensions
+{
+    public static JBeam.ArrayFormat Next(this JBeam.ArrayFormat format) => format < JBeam.ArrayFormat.Inline ? format + 1 : format;
+}
+
 partial class JBeam // Lexer
 {
     public enum TokenType
     {
-        LBrace,    // {
-        RBrace,    // }
-        LBracket,  // [
-        RBracket,  // ]
-        Colon,     // :
-        Comma,     // ,
-        String,    // "foo" or <foo>
-        Bareword,  // foo
-        Number,    // 123, -0.5, 1e-3
-        True,
-        False,
-        Null,
+        LBrace,         // {
+        RBrace,         // }
+        LBracket,       // [
+        RBracket,       // ]
+        Colon,          // :
+        Comma,          // ,
+        String,         // "foo" or <foo>
+        Identifier,     // foo
+        Number,         // 123, -0.5, 1e-3
+        Boolean,
+        CommentLine,    // // comment
+        CommentBlock,   // /* comment */
+        Null,        
         EOF
     }
 
@@ -264,12 +445,6 @@ partial class JBeam // Lexer
                 Advance();
         }
 
-        private void SkipLineComment()
-        {
-            while (Current != '\n' && Current != '\r' && Current != '\0')
-                Advance();
-        }
-
         public List<Token> LexAll()
         {
             var tokens = new List<Token>();
@@ -295,31 +470,11 @@ partial class JBeam // Lexer
 
             // Comments
             if (c == '/' && Peek() == '/')
-            {
-                Advance(); // /
-                Advance(); // /
-                SkipLineComment();
-                return NextToken();
-            }
+                return LexCommentLine(start);
 
             // Block comment: /* ... */
             if (c == '/' && Peek() == '*')
-            {
-                Advance(); // /
-                Advance(); // *
-
-                // Skip until closing */
-                while (!(Current == '*' && Peek() == '/') && Current != '\0')
-                    Advance();
-
-                if (Current == '*' && Peek() == '/')
-                {
-                    Advance(); // *
-                    Advance(); // /
-                }
-
-                return NextToken(); // continue lexing
-            }
+                return LexCommentBlock(start);
 
             // Structural
             switch (c)
@@ -342,7 +497,7 @@ partial class JBeam // Lexer
 
             // Identifier / keyword
             if (IsIdentStart(c))
-                return LexIdent(start);
+                return LexIdentifier(start);
 
             var snippet = _text.Substring(Math.Max(0, start.Position - 10), Math.Min(20, _text.Length - start.Position + 10));
             throw new Exception($"Unexpected character '{c}' at {start}. Context: {snippet}");
@@ -353,6 +508,42 @@ partial class JBeam // Lexer
 
         private bool IsIdentPart(char c) =>
             char.IsLetterOrDigit(c) || c == '_' || c == '$';
+
+        private Token LexCommentLine(TextLocation startPos)
+        {
+            var sb = new StringBuilder();
+            Advance(); // skip /
+            Advance(); // skip /
+
+            while (Current != '\n' && Current != '\r' && Current != '\0')
+            {
+                sb.Append(Current);
+                Advance();
+            }
+
+            return new Token(TokenType.CommentLine, sb.ToString(), startPos);
+        }
+
+        private Token LexCommentBlock(TextLocation startPos)
+        {
+            var sb = new StringBuilder();
+            Advance(); // skip /
+            Advance(); // skip *
+
+            while (!(Current == '*' && Peek() == '/') && Current != '\0')
+            {
+                sb.Append(Current);
+                Advance();
+            }
+
+            if (Current == '*' && Peek() == '/')
+            {
+                Advance(); // *
+                Advance(); // /
+            }
+
+            return new Token(TokenType.CommentBlock, sb.ToString(), startPos);
+        }        
 
         private Token LexString(char startChar, TextLocation startPos)
         {
@@ -428,7 +619,7 @@ partial class JBeam // Lexer
             return new Token(TokenType.Number, sb.ToString(), startPos);
         }
 
-        private Token LexIdent(TextLocation startPos)
+        private Token LexIdentifier(TextLocation startPos)
         {
             var sb = new StringBuilder();
 
@@ -442,10 +633,9 @@ partial class JBeam // Lexer
 
             return text switch
             {
-                "true"  => new Token(TokenType.True, text, startPos),
-                "false" => new Token(TokenType.False, text, startPos),
-                "null"  => new Token(TokenType.Null, text, startPos),
-                _       => new Token(TokenType.Bareword, text, startPos),
+                "true" or "false" => new Token(TokenType.Boolean, text, startPos),
+                "null"            => new Token(TokenType.Null, text, startPos),
+                _                 => new Token(TokenType.Identifier, text, startPos),
             };
         }
     }
@@ -518,15 +708,17 @@ partial class JBeam // Parser
 
             while (Current.Type != TokenType.RBrace && Current.Type != TokenType.EOF)
             {
+                // comments
+                if (obj.Add(ParseComment()))
+                    continue;
+
                 // key
                 string key = ParseKey();
-
                 Consume(TokenType.Colon);
 
                 // value
                 Node value = ParseValue();
-
-                obj.Properties[key] = value;
+                obj.Add(key, value);
 
                 Match(TokenType.Comma); // optional comma
             }
@@ -535,12 +727,22 @@ partial class JBeam // Parser
             return obj;
         }
 
+        private Node? ParseComment()
+        {
+            return Current.Type switch
+            {
+                TokenType.CommentLine   => new CommentNode(Consume(TokenType.CommentLine).Value, false),
+                TokenType.CommentBlock  => new CommentNode(Consume(TokenType.CommentBlock).Value, true),
+                _ => null
+            };
+        }
+
         private string ParseKey()
         {
             return Current.Type switch
             {
-                TokenType.String   => Consume(Current.Type).Value,
-                TokenType.Bareword => Consume(Current.Type).Value,
+                TokenType.String        => Consume(Current.Type).Value,
+                TokenType.Identifier    => Consume(Current.Type).Value,
                 _ => throw new Exception($"Invalid key token {Current.Type} at {Current.Location}")
             };
         }
@@ -549,14 +751,15 @@ partial class JBeam // Parser
         {
             return Current.Type switch
             {
-                TokenType.String   => new ValueNode(Consume(Current.Type).Value),
-                TokenType.Number   => new ValueNode(Consume(Current.Type).Value),
-                TokenType.True     => new ValueNode(Consume(TokenType.True).Value),
-                TokenType.False    => new ValueNode(Consume(TokenType.False).Value),
-                TokenType.Null     => new ValueNode(Consume(TokenType.Null).Value),
-                TokenType.Bareword => new ValueNode(Consume(Current.Type).Value),
-                TokenType.LBracket => ParseArray(),
-                TokenType.LBrace   => ParseJsonOrObject(),
+                TokenType.String        => new ValueNode(Consume(Current.Type).Value),
+                TokenType.Identifier    => new ValueNode(Consume(Current.Type).Value),
+                TokenType.Number        => new ValueNode(Consume(Current.Type).Value),
+                TokenType.CommentLine   => new CommentNode(Consume(TokenType.CommentLine).Value, false),
+                TokenType.CommentBlock  => new CommentNode(Consume(TokenType.CommentBlock).Value, true),
+                TokenType.Boolean       => new ValueNode(Consume(TokenType.Boolean).Value),
+                TokenType.Null          => new ValueNode(Consume(TokenType.Null).Value),
+                TokenType.LBracket      => ParseArray(),
+                TokenType.LBrace        => ParseJsonOrObject(),
                 _ => throw new Exception($"Unexpected value token {Current.Type} at {Current.Location}")
             };
         }
@@ -601,10 +804,11 @@ partial class JBeam // Parser
         {
             return type == TokenType.String ||
                 type == TokenType.Number ||
-                type == TokenType.True ||
-                type == TokenType.False ||
+                type == TokenType.Boolean ||
                 type == TokenType.Null ||
-                type == TokenType.Bareword ||
+                type == TokenType.Identifier ||
+                type == TokenType.CommentLine ||
+                type == TokenType.CommentBlock ||
                 type == TokenType.LBracket ||
                 type == TokenType.LBrace;
         }
@@ -624,52 +828,6 @@ partial class JBeam // Parser
         private JsonNode CaptureJsonBlock()
         {
             return (JsonNode)ParseObject(true);
-        }
-    }
-
-    public static class DebugDump
-    {
-        public static void DumpNode(Node node, int indent = 0)
-        {
-            string pad = Pad(indent);
-
-            switch (node)
-            {
-                case ValueNode v:
-                    Console.WriteLine($"{pad}Value: {v.Value}");
-                    break;
-
-                case ArrayNode a:
-                    Console.WriteLine($"{pad}Array:");
-                    for (int i = 0; i < a.Items.Count; i++)
-                    {
-                        Console.WriteLine($"{pad}  [{i}]");
-                        DumpNode(a.Items[i], indent + 2);
-                    }
-                    break;
-
-                case JsonNode j:
-                    Console.WriteLine($"{pad}JsonBlock: ");
-                    foreach (var kv in j.Properties)
-                    {
-                        Console.WriteLine($"{pad}  {kv.Key}:");
-                        DumpNode(kv.Value, indent + 2);
-                    }
-                    break;
-
-                case ObjectNode o:
-                    Console.WriteLine($"{pad}Object:");
-                    foreach (var kv in o.Properties)
-                    {
-                        Console.WriteLine($"{pad}  {kv.Key}:");
-                        DumpNode(kv.Value, indent + 2);
-                    }
-                    break;
-
-                default:
-                    Console.WriteLine($"{pad}Unknown node");
-                    break;
-            }
         }
     }
 

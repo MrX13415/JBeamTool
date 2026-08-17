@@ -28,8 +28,13 @@ partial class JBeam
 
             foreach (var kv in Root.Properties)
             {
-                if (kv.Value is ObjectNode obj)
-                    Parts.Add(new Part(new KeyedNode(kv.Key, obj)));
+                // Ignore comments
+                if (kv.Value is CommentNode) continue;
+
+                if (kv.Value is ObjectNode obj && kv.Key is ObjectNode.KeyNamed key)
+                    Parts.Add(new Part(new KeyedNode(key.Name, obj)));
+                else if (kv.Value is ObjectNode)
+                    Warn($"Top-level key '{kv.Key}' is {kv.Key.GetType().Name} and will be ignored.");
                 else
                     Warn($"Top-level key '{kv.Key}' is not an object and will be ignored.");
             }
@@ -39,11 +44,11 @@ partial class JBeam
             // root.Properties.Count > parts.Count -> some top-level keys weren’t objects
             // root.Properties.Count < parts.Count -> impossible (means parser bug)
             if (!Sanity)
-            {
-                Warn($"Top-level keys count ({Root.Properties.Count}) does not match detected parts count ({Parts.Count}).");
-                if (Root.Properties.Count > Parts.Count)
+            {                
+                Warn($"Top-level keys count ({Root.PropertiesNamed.Count}) does not match detected parts count ({Parts.Count}).");
+                if (Root.PropertiesNamed.Count > Parts.Count)
                     Warn($"Some top-level keys were not objects and thus not counted as parts.");
-                if (Root.Properties.Count < Parts.Count)
+                if (Root.PropertiesNamed.Count < Parts.Count)
                     Warn($"More parts detected than top-level keys. This should not happen. (Parser bug?)");
             }
 
@@ -52,13 +57,13 @@ partial class JBeam
         }
         catch (Exception ex)
         {
-            Warn($"Unable to load JBeam file:\n{ex.Message}");
+            Warn($"Unable to load JBeam file: {ex.Message} {ex.StackTrace}");
             OnLoadFile?.Invoke(this);
             return false;
         }
     }
     public string FileContent => File.ReadAllText(FilePath);
-    public bool Sanity => Root.Properties.Count == Parts.Count;
+    public bool Sanity => Root.PropertiesNamed.Count == Parts.Count;
 
     public static List<JBeam> LoadPath(string path)
     {

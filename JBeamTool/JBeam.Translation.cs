@@ -21,47 +21,7 @@ partial class JBeam
 
         public static TranslationKey New(string prefix, string str)
         {
-            var test1 = JsonEscape("\"lol\"");
-            var test2 = JsonEscape("A\nB");
-
             return new TranslationKey($"{prefix}{JsonEscape(str)}", JsonEscape(str));
-        }
-
-        public static readonly Dictionary<string, char> JsonEscapeMap = new()
-        {
-            [@""""] = '"',
-            [@"\\"] = '\\',
-            [@"\b"] = '\b',
-            [@"\f"] = '\f',
-            [@"\n"] = '\n',
-            [@"\r"] = '\r',
-            [@"\t"] = '\t'
-        };
-        public static string JsonEscape(string str)
-        { 
-            if (str == null)
-                return "";
-
-            // Escape tokens found, assume string is already escaped.
-            // Notice: This does not check \uXXXX sequences!
-            if (JsonEscapeMap.Any(kv => str.Contains(kv.Key)))
-                return str;
-
-            var sb = new StringBuilder(str.Length + 10);
-            for(int i = 0; i < str.Length; i++)
-            {
-                char c = str[i];
-                
-                var token = JsonEscapeMap.FirstOrDefault(kv => kv.Value == c);
-                if (token.Key != null)
-                    sb.Append(token.Key);
-                else if (c < 0x20)
-                    sb.Append("u").Append(((int)c).ToString("x4"));
-                else
-                    sb.Append(c);
-            }
-
-            return sb.ToString();
         }
 
         public static List<TranslationKey> LoadReference()
