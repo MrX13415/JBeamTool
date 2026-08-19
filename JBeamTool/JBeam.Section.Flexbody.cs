@@ -35,7 +35,7 @@ partial class JBeam
     {
         public List<Flexbody> Flexbodies { get; set; } = new();
 
-        public FlexbodiesSection(KeyedNode node) : base(node)
+        public FlexbodiesSection(NodeEntry node) : base(node)
         {
             if (Type != SectionType.Flexbodies)
                 throw new ArgumentException("Section is not a flexbodies section.", nameof(node));

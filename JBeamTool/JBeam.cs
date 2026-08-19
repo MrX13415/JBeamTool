@@ -31,8 +31,8 @@ partial class JBeam
                 // Ignore comments
                 if (kv.Value is CommentNode) continue;
 
-                if (kv.Value is ObjectNode obj && kv.Key is ObjectNode.KeyNamed key)
-                    Parts.Add(new Part(new KeyedNode(key.Name, obj)));
+                if (kv.Value is ObjectNode obj && kv.Key is KeyNamed key)
+                    Parts.Add(new Part(new NodeEntry(key, obj)));
                 else if (kv.Value is ObjectNode)
                     Warn($"Top-level key '{kv.Key}' is {kv.Key.GetType().Name} and will be ignored.");
                 else if (kv.Value is not EmptyLineNode)

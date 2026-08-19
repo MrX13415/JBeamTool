@@ -104,7 +104,6 @@ void Run_Dump()
     var jbeams = JBeam.LoadPath(sourceDir);
 
     Print("");
-    Print("Parts:");
     foreach (var jbeam in jbeams)
     {
         var relativePath = Path.GetRelativePath(sourceDir, jbeam.FilePath);

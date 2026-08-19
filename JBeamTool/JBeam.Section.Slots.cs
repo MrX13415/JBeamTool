@@ -43,8 +43,8 @@ partial class JBeam
             }
 
             // New format: [name, allowTypes[], denyTypes[], default, description]
-            var fieldAllow = node[1]?.ArrayNode?.Items.Select(i => i.ValueStr ?? "").ToList();
-            var fieldDeny = node[2]?.ArrayNode?.Items.Select(i => i.ValueStr ?? "").ToList();
+            var fieldAllow = node[1]?.NodeArray?.Items.Select(i => i.ValueStr ?? "").ToList();
+            var fieldDeny = node[2]?.NodeArray?.Items.Select(i => i.ValueStr ?? "").ToList();
             return new Slot
             {                
                 Name = node[0]?.ValueStr ?? "",
@@ -59,7 +59,7 @@ partial class JBeam
     {
         public List<Slot> Slots { get; set; }
 
-        public SlotsSection(KeyedNode node) : base(node)
+        public SlotsSection(NodeEntry node) : base(node)
         {
             if (Type != SectionType.Slots && Type != SectionType.Slots2)
                 throw new ArgumentException("Section is not a slots section.", nameof(node));

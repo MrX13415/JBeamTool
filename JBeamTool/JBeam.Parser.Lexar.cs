@@ -23,10 +23,52 @@ partial class JBeam // Lexer
 
     public record TextLocation(int Position, int Line, int Column)
     {
-        public override string ToString()
-            => $"{Line}:{Column}[{Position}]";
+        public static TextLocation operator-(TextLocation a, TextLocation b)
+        {
+            var pos = a.Position - b.Position;
+            var line = a.Line - b.Line;
+            var col = line == 0 ? a.Column - b.Column : a.Column;
+            return new TextLocation(pos, line, col);
+        }
+        public static TextLocation operator+(TextLocation a, TextLocation b)
+        {
+            var pos = a.Position + b.Position;
+            var line = a.Line + b.Line;
+            var col = line == 0 ? a.Column + b.Column : a.Column;
+            return new TextLocation(pos, line, col);
+        }
+
+        public override string ToString() => $"{Line}:{Column}[{Position}]";
+
+        public static TextLocation Get(string text, TextLocation? start = default)
+        {
+            var _start = start ?? new TextLocation(0, 0, 0);
+            var lines = text.Replace("\r\n", "\n").Split('\n');
+            int lastLineLength = lines.LastOrDefault()?.Length ?? 0;
+            return new TextLocation(_start.Position + text.Length, _start.Line + lines.Length, lastLineLength);
+        }
     }
-    public record Token(TokenType Type, string Value, TextLocation Location);
+
+    public record class TextRegion(TextLocation Start, TextLocation End)
+    {
+        public TextRegion() : this(new TextLocation(0, 0, 0), new TextLocation(0, 0, 0)) {}
+        public TextLocation Delta => End - Start;
+
+        public override string ToString() => $"{Start.Line}:{Start.Column}-{End.Line}:{End.Column}";
+
+        public static TextRegion Get(string text, TextLocation? start = default)
+        {
+            var _start = start ?? new TextLocation(0, 0, 0);
+            var end = TextLocation.Get(text, _start);
+            return new TextRegion(_start, end);
+        }
+    }
+
+
+    public record Token(TokenType Type, string Value, TextLocation Location)
+    {
+        public TextRegion Region => TextRegion.Get(Value, Location);
+    }
 
     public class Lexer
     {
@@ -77,15 +119,15 @@ partial class JBeam // Lexer
             _column++;
         }
 
-        private int SkipWhitespace()
+        private TextLocation SkipWhitespace()
         {
-            int line = _line;
+            var loc = Location;
             while (true)
             {
                 if (!char.IsWhiteSpace(Current)) break;
                 Advance();
             }
-            return _line - line;
+            return Location - loc;
         }
 
         public List<Token> LexAll()
@@ -103,7 +145,7 @@ partial class JBeam // Lexer
 
         private Token NextToken()
         {
-            int linesSkipped = SkipWhitespace();
+            TextLocation skipped = SkipWhitespace();
 
             TextLocation start = Location;
             char c = Current;
@@ -112,8 +154,8 @@ partial class JBeam // Lexer
                 return new Token(TokenType.EOF, "", Location);
 
             // Preserve empty lines
-            if (linesSkipped >= 2)
-                return new Token(TokenType.EmptyLine, new string('\n', linesSkipped), start);
+            if (skipped.Line >= 2)
+                return LexEmptyLine(skipped);
 
             // Comments
             if (c == '/' && Peek() == '/')
@@ -155,6 +197,15 @@ partial class JBeam // Lexer
 
         private bool IsIdentPart(char c) =>
             char.IsLetterOrDigit(c) || c == '_' || c == '$';
+
+
+        private Token LexEmptyLine(TextLocation delta)
+        {
+            var start = (Location - delta);
+            var length = delta.Position;
+            var snippet = _text.Substring(start.Position, length);
+            return new Token(TokenType.EmptyLine, snippet, start);
+        }
 
         private Token LexCommentLine(TextLocation startPos)
         {

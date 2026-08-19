@@ -15,18 +15,18 @@ partial class JBeam
 
     public class Section
     {
-        public KeyedNode Node { get; set; }
-        public Section(KeyedNode node)
+        public NodeEntry Node { get; set; }
+        public Section(NodeEntry node)
         {
             Node = node;
         }
 
-        public string Key => Node.Key;
-        public SectionType Type => GetType(Key);
+        public string Identifier => Node.Name;
+        public SectionType Type => GetType(Identifier);
         public static SectionType GetType(string key) 
             => Enum.TryParse(key, true, out SectionType result) ? result : SectionType.Unknown;
 
-        public static Section New(KeyedNode node) => GetType(node.Key) switch
+        public static Section New(NodeEntry node) => GetType(node.Name) switch
         {
             SectionType.Information => new InformationSection(node),
             SectionType.Slots => new SlotsSection(node),

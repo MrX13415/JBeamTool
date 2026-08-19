@@ -5,7 +5,7 @@ partial class JBeam
 {
     public class InformationSection : Section
     {
-        public InformationSection(KeyedNode node) : base(node)
+        public InformationSection(NodeEntry node) : base(node)
         {
             if (Type != SectionType.Information)
                 throw new ArgumentException("Section is not an information section.", nameof(node));
@@ -19,7 +19,11 @@ partial class JBeam
         {
             if (NameNode is ValueNode valueNode)
                 return valueNode.ValueStr ?? "";
-            // TODO: Handle ObjectNode as name (e.g., for "name" = { "some_key" }).
+            if (NameNode is ObjectNode objectNode)
+            {
+                var txt = objectNode.Get("txt")?.ValueStr ?? "<unknown>";
+                return $"{{{{ {txt} | translate }}}}";
+            }
             return "";
         }
 

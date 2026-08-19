@@ -2,21 +2,6 @@ using System.Text;
 
 partial class JBeam // Parser
 {
-    public class KeyedNode
-    {
-        public string Key { get; }
-        public Node Value { get; }
-
-        public KeyedNode(string key, Node value)
-        {
-            Key = key;
-            Value = value;
-        }
-
-        public T? As<T>() where T : Node
-            => (Value is T t) ? t : null;
-    }
-
     public class Parser
     {
         private readonly List<Token> _tokens;
@@ -63,22 +48,18 @@ partial class JBeam // Parser
         private ObjectNode ParseObject(bool json = false)
         {
             var obj = json ? new JsonNode() : new ObjectNode();
-            Consume(TokenType.LBrace);
+            var start = Consume(TokenType.LBrace).Location;
 
             while (Current.Type != TokenType.RBrace && Current.Type != TokenType.EOF)
             {
                 // empty lines
-                if (obj.Add(ParseEmptyLine()))
-                    continue;
-
+                if (obj.Add(ParseEmptyLine())) continue;
                 // comments
-                if (obj.Add(ParseComment()))
-                    continue;
+                if (obj.Add(ParseComment())) continue;
 
                 // key
-                string key = ParseKey();
+                Token key = ParseKey();
                 Consume(TokenType.Colon);
-
                 // value
                 Node value = ParseValue();
                 obj.Add(key, value);
@@ -86,14 +67,16 @@ partial class JBeam // Parser
                 Match(TokenType.Comma); // optional comma
             }
 
-            Consume(TokenType.RBrace);
+            var end = Consume(TokenType.RBrace).Location;
+            obj.Region = new TextRegion(start, end);
+
             return obj;
         }
 
         private Node? ParseEmptyLine()
         {
             if (Current.Type == TokenType.EmptyLine)
-                return new EmptyLineNode(Consume(TokenType.EmptyLine).Value);
+                return new EmptyLineNode(Consume(TokenType.EmptyLine));
             return null;
         }
 
@@ -101,18 +84,18 @@ partial class JBeam // Parser
         {
             return Current.Type switch
             {
-                TokenType.CommentLine   => new CommentNode(Consume(TokenType.CommentLine).Value, false),
-                TokenType.CommentBlock  => new CommentNode(Consume(TokenType.CommentBlock).Value, true),
+                TokenType.CommentLine   => new CommentNode(Consume(TokenType.CommentLine)),
+                TokenType.CommentBlock  => new CommentNode(Consume(TokenType.CommentBlock)),
                 _ => null
             };
         }
 
-        private string ParseKey()
+        private Token ParseKey()
         {
             return Current.Type switch
             {
-                TokenType.String        => Consume(Current.Type).Value,
-                TokenType.Identifier    => Consume(Current.Type).Value,
+                TokenType.String        => Consume(Current.Type),
+                TokenType.Identifier    => Consume(Current.Type),
                 _ => throw new Exception($"Invalid key token {Current.Type} at {Current.Location}")
             };
         }
@@ -121,14 +104,14 @@ partial class JBeam // Parser
         {
             return Current.Type switch
             {
-                TokenType.EmptyLine     => new EmptyLineNode(Consume(TokenType.EmptyLine).Value),
-                TokenType.CommentLine   => new CommentNode(Consume(TokenType.CommentLine).Value, false),
-                TokenType.CommentBlock  => new CommentNode(Consume(TokenType.CommentBlock).Value, true),
-                TokenType.String        => new ValueNode(Consume(Current.Type).Value),
-                TokenType.Identifier    => new ValueNode(Consume(Current.Type).Value),
-                TokenType.Number        => new ValueNode(Consume(Current.Type).Value),
-                TokenType.Boolean       => new ValueNode(Consume(TokenType.Boolean).Value),
-                TokenType.Null          => new ValueNode(Consume(TokenType.Null).Value),
+                TokenType.EmptyLine     => new EmptyLineNode(Consume(TokenType.EmptyLine)),
+                TokenType.CommentLine   => new CommentNode(Consume(TokenType.CommentLine)),
+                TokenType.CommentBlock  => new CommentNode(Consume(TokenType.CommentBlock)),
+                TokenType.String        => new ValueNode(Consume(Current.Type)),
+                TokenType.Identifier    => new ValueNode(Consume(Current.Type)),
+                TokenType.Number        => new ValueNode(Consume(Current.Type)),
+                TokenType.Boolean       => new ValueNode(Consume(TokenType.Boolean)),
+                TokenType.Null          => new ValueNode(Consume(TokenType.Null)),
                 TokenType.LBracket      => ParseArray(),
                 TokenType.LBrace        => ParseJsonOrObject(),
                 _ => throw new Exception($"Unexpected value token {Current.Type} at {Current.Location}")
@@ -138,7 +121,7 @@ partial class JBeam // Parser
         private ArrayNode ParseArray()
         {
             var arr = new ArrayNode();
-            Consume(TokenType.LBracket);
+            var start = Consume(TokenType.LBracket).Location;
 
             bool prev = _insideArray;
             _insideArray = true;
@@ -165,9 +148,10 @@ partial class JBeam // Parser
                 throw new Exception($"Unexpected token {Current.Type} in array at {Current.Location}");
             }
 
-            Consume(TokenType.RBracket);
-            _insideArray = prev;
+            var end = Consume(TokenType.RBracket).Location;
+            arr.Region = new TextRegion(start, end);
 
+            _insideArray = prev;
             return arr;
         }
 
@@ -216,7 +200,7 @@ partial class JBeam // Parser
 
 }
 
-static class JBeamExtensions
+static partial class JBeamExtensions
 {
     public static JBeam.ArrayFormat Next(this JBeam.ArrayFormat format) => format < JBeam.ArrayFormat.Inline ? format + 1 : format;
 

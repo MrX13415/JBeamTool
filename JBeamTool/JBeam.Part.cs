@@ -5,10 +5,10 @@ partial class JBeam
 {
     public class Part
     {
-        public KeyedNode Node { get; set; }
+        public NodeEntry Node { get; set; }
         public List<Section> Sections { get; set; }
 
-        public Part(KeyedNode node)
+        public Part(NodeEntry node)
         {
             if (node.Value is not ObjectNode)
                 throw new ArgumentException("Node value must be an ObjectNode.", nameof(node));
@@ -17,7 +17,7 @@ partial class JBeam
             Sections = BuildSections();
         }
 
-        public string? Name => Node.Key;
+        public string? Name => Node.Name;
         public ObjectNode Object() => Node.As<ObjectNode>()!;
 
         public List<Section> BuildSections()
@@ -25,9 +25,9 @@ partial class JBeam
             List<Section> sections = new();
             foreach (var kv in Object().Properties)
             {
-                if (kv.Key is ObjectNode.KeyNamed key)
+                if (kv.Key is KeyNamed key)
                 {
-                    var section = Section.New(new KeyedNode(key.Name, kv.Value));
+                    var section = Section.New(new NodeEntry(key, kv.Value));
                     sections.Add(section);
                 }
             }

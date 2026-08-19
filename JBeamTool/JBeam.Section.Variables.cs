@@ -38,7 +38,7 @@ partial class JBeam
     {
         public List<Variable> Variables { get; set; } = new();
 
-        public VariablesSection(KeyedNode node) : base(node)
+        public VariablesSection(NodeEntry node) : base(node)
         {
             if (Type != SectionType.Variables)
                 throw new ArgumentException("Section is not a variables section.", nameof(node));
