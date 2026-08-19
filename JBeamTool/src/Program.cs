@@ -118,6 +118,41 @@ void Run_Dump()
     }
 }
 
+void Run_Slots2()
+{
+    var args = Environment.GetCommandLineArgs();
+    string sourceDir = args.Length > 2 ? args[2] : Directory.GetCurrentDirectory();
+    string targetDir = args.Length > 3 ? args[3] : Directory.GetCurrentDirectory();
+
+    if (!Directory.Exists(sourceDir))
+    {
+        Print($"Source directory does not exist: {sourceDir}");
+        return;
+    }
+
+    sourceDir = Path.GetFullPath(sourceDir);
+    targetDir = Path.GetFullPath(targetDir);
+    Print($"Source: {sourceDir}");
+    Print($"Target: {targetDir}");
+
+    InitJBeam(sourceDir);
+    var jbeams = JBeamFile.LoadFiles(sourceDir);
+
+    Print("");
+    foreach (var jbeam in jbeams)
+    {
+        var relativePath = Path.GetRelativePath(sourceDir, jbeam.FilePath);
+        Print($"File: {relativePath}");
+
+
+
+        // var newFile = Path.GetFullPath(Path.Combine(targetDir, relativePath));
+        // Directory.CreateDirectory(Path.GetDirectoryName(newFile)!);
+        // File.WriteAllText(newFile, content);
+    }
+}
+
+
 void Run()
 {
     var args = Environment.GetCommandLineArgs();
