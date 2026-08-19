@@ -54,7 +54,7 @@ public partial class JBeamFile
 
     }
 
-    public partial class PartsTree  // Building
+    public partial class PartsTree
     {
         public List<Node> Roots { get; } = new();
 
