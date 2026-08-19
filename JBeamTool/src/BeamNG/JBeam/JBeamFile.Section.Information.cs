@@ -23,7 +23,7 @@ public partial class JBeamFile
             var authorNode = Content?.Get("authors");
             if (authorNode is ValueNode valueNode) yield return valueNode.ValueStr ?? "";
             if (authorNode is ArrayNode arrayNode) 
-                foreach (var author in arrayNode.AsStringList())
+                foreach (var author in arrayNode.AsString().ToList())
                     yield return author;
         }
         private string GetName()

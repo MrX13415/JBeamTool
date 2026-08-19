@@ -22,10 +22,10 @@ public partial class JBeamFile
             };
 
             if (arrayNode[1] is ArrayNode groupsNode)
-                flexbody.Groups = groupsNode.AsStringList();
+                flexbody.Groups = groupsNode.AsString().ToList();
 
             if (arrayNode[2] is ArrayNode nonFlexMaterialsNode)
-                flexbody.NonFlexMaterials = nonFlexMaterialsNode.AsStringList();
+                flexbody.NonFlexMaterials = nonFlexMaterialsNode.AsString().ToList();
 
             if (arrayNode[3] is JsonNode jsonNode)
                 flexbody.Json = jsonNode;

@@ -93,14 +93,14 @@ public partial class ArrayNode : Node
 
     public new Node? this[int index] => (index >= 0 && index < Items.Count) ? Items[index] : null;
 
-    public List<string> AsStringList()
+    public IEnumerable<string> AsString()
     {       
-        var list = new List<string>();
         foreach (var item in Items)
         {
-            list.Add(item.ValueStr ?? "");
+            var v = item.ValueStr;
+            if (!string.IsNullOrEmpty(v))
+                yield return v;
         }
-        return list;
     }
 }
 

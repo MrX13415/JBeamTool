@@ -160,6 +160,11 @@ void Run_PriceList()
     var jbeams = JBeamFile.LoadFiles(sourceDir);
     Print();
     
+
+    JBeamFile.PartsTree partsTree = new(jbeams);
+    var newFile = Path.GetFullPath(Path.Combine(".", "parts_tree.txt"));
+    File.WriteAllText(newFile, partsTree.ToString());
+    
     foreach (var jbeam in jbeams)
     {
         var relativePath = Path.GetRelativePath(sourceDir, jbeam.FilePath);

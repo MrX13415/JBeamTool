@@ -3,6 +3,42 @@ namespace BeamNG.JBeam;
 
 public partial class JBeamFile
 {
+
+    public class SlotTypeSection : Section
+    {
+        public List<string> Items { get; set; }
+        
+        public SlotTypeSection(NodeEntry node) : base(node)
+        {
+            if (Type != SectionType.SlotType)
+                throw new ArgumentException("Section is not a slotType section.", nameof(node));
+
+            Items = BuildTypes().ToList();
+        }
+        public ArrayNode? ContentNode => Node.As<ArrayNode>();
+
+        public bool HasSlotType(string slotType) => Items.Contains(slotType);
+        public override string ToString() => string.Join(", ", Items);
+
+        public IEnumerable<string> BuildTypes()
+        {
+            if (Node.Value is ValueNode valueNode)
+            {
+                var typeStr = valueNode.ValueStr;
+                if (!string.IsNullOrEmpty(typeStr))
+                    yield return typeStr;
+            }
+            else if (Node.Value is ArrayNode arrayNode)
+            {
+                var types = arrayNode.AsString().ToList();
+                foreach (var type in types)
+                    yield return type;
+            }
+
+            yield break;
+        }
+    }
+
     public record class Slot
     {
         public required string Name;
@@ -54,17 +90,23 @@ public partial class JBeamFile
                 Description = node[4]?.ValueStr ?? ""
             };
         }
+  
+        public bool IsInAllowList(List<string> slotType) => slotType.Any(AllowTypes.Contains);
+        public bool IsInDenyList(List<string> slotType) => slotType.Any(DenyTypes.Contains);
+        public bool IsAllowed(List<string> slotType) => IsInAllowList(slotType) && !IsInDenyList(slotType);
+    
     }
+
     public class SlotsSection : Section
     {
-        public List<Slot> Slots { get; set; }
+        public List<Slot> Items { get; set; }
 
         public SlotsSection(NodeEntry node) : base(node)
         {
             if (Type != SectionType.Slots && Type != SectionType.Slots2)
                 throw new ArgumentException("Section is not a slots section.", nameof(node));
 
-            Slots = BuildSlots();
+            Items = BuildSlots();
         }
         public ArrayNode? ContentNode => Node.As<ArrayNode>();
 
@@ -86,7 +128,7 @@ public partial class JBeamFile
 
         public IEnumerable<TranslationKey> GetTranslationKeys()
         {
-            foreach (var slot in Slots)
+            foreach (var slot in Items)
             {
                 if (!string.IsNullOrEmpty(slot.Description))
                 {

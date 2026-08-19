@@ -38,37 +38,35 @@ public partial class JBeamFile
     }
     public class VariablesSection : Section
     {
-        public List<Variable> Variables { get; set; } = new();
+        public List<Variable> Items { get; set; }
 
         public VariablesSection(NodeEntry node) : base(node)
         {
             if (Type != SectionType.Variables)
                 throw new ArgumentException("Section is not a variables section.", nameof(node));
 
-            Variables = BuildVariables();
+            Items = BuildVariables().ToList();
         }
 
         public ArrayNode? ContentNode => Node.As<ArrayNode>();
 
-        public List<Variable> BuildVariables()
+        public IEnumerable<Variable> BuildVariables()
         {
-            List<Variable> variables = new();
-            if (ContentNode == null) return variables;
-
+            if (ContentNode == null) yield break;
+    
             foreach (var item in ContentNode.Items.Skip(1)) // Skip the header row
             {
                 if (item is ArrayNode arrayNode)
                 {
                     var variable = Variable.New(arrayNode);
-                    variables.Add(variable);
+                    yield return variable;
                 }
             }
-            return variables;
         }
 
         public IEnumerable<TranslationKey> GetTranslationKeys()
         {
-            foreach (var variable in Variables)
+            foreach (var variable in Items)
             {
                 if (!string.IsNullOrEmpty(variable.Title    ))
                     yield return TranslationKey.New(TranslationKey.VariableTitle, variable.Title);

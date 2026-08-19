@@ -20,25 +20,18 @@ public partial class JBeamFile
         {
             FileContent = ReadFileContent();
             Root = Parse();
-            Parts.Clear();
+            Parts = Part.BuildParts(FilePath, Root).ToList();
 
+            // Sanity check: ensure all top-level keys are objects (or comments/empty lines)
             foreach (var kv in Root.Properties)
             {
-                // Ignore comments
-                if (kv.Value is CommentNode) continue;
-
-                if (kv.Value is ObjectNode obj && kv.Key is KeyNamed key)
-                    Parts.Add(new Part(new NodeEntry(key, obj)));
-                else if (kv.Value is ObjectNode)
+                if (kv.Value is ObjectNode && kv.Key is not KeyNamed)
                     Warn($"Top-level key '{kv.Key}' is {kv.Key.GetType().Name} and will be ignored.");
-                else if (kv.Value is not EmptyLineNode)
+                if (kv.Value is not CommentNode && kv.Value is not EmptyLineNode && kv.Value is not ObjectNode)
                     Warn($"Top-level key '{kv.Key}' is not an object and will be ignored.");
             }
 
-            // Sanity check: print some info about the parsed structure
-            // root.Properties.Count == parts.Count -> perfect
-            // root.Properties.Count > parts.Count -> some top-level keys weren’t objects
-            // root.Properties.Count < parts.Count -> impossible (means parser bug)
+            // Sanity check: ensure the number of top-level keys matches the number of detected parts
             if (!Sanity)
             {                
                 Warn($"Top-level keys count ({Root.PropertiesNamed.Count}) does not match detected parts count ({Parts.Count}).");

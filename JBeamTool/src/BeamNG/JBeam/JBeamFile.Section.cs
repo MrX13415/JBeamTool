@@ -7,6 +7,7 @@ public partial class JBeamFile
     {
         Unknown,
         Information,
+        SlotType,
         Slots,
         Slots2,
         Variables,
@@ -31,6 +32,7 @@ public partial class JBeamFile
         public static Section New(NodeEntry node) => GetType(node.Name) switch
         {
             SectionType.Information => new InformationSection(node),
+            SectionType.SlotType => new SlotTypeSection(node),
             SectionType.Slots => new SlotsSection(node),
             SectionType.Slots2 => new SlotsSection(node),
             SectionType.Variables => new VariablesSection(node),
@@ -38,6 +40,18 @@ public partial class JBeamFile
             _ => new Section(node)
         };
 
+        public static IEnumerable<Section> BuildSections(ObjectNode? obj)
+        {
+            if (obj == null) yield break;
+            foreach (var kv in obj.Properties)
+            {
+                if (kv.Key is KeyNamed key)
+                {
+                    var section = New(new NodeEntry(key, kv.Value));
+                    yield return section;
+                }
+            }
+        }
     }
     
 }
