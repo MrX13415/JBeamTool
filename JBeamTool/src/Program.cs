@@ -162,9 +162,34 @@ void Run_PriceList()
     
 
     JBeamFile.PartsTree partsTree = new(jbeams);
-    var newFile = Path.GetFullPath(Path.Combine(".", "parts_tree.txt"));
-    File.WriteAllText(newFile, partsTree.ToString());
-    
+    {
+        var newFile = Path.GetFullPath(Path.Combine(".", "parts_tree.txt"));
+        File.WriteAllText(newFile, partsTree.ToString());
+    }
+    {
+        var newFile = Path.GetFullPath(Path.Combine(".", "price_tree.txt"));
+        JBeamFile.PartsTree.TreePrinter.Config config = new()
+        {
+            LabelCallback = (node, isRef) =>
+            {
+                if (isRef) return "";
+                else
+                {
+                    if (node.IsSlot)
+                        return $"[{node.Slot?.Name}]" ?? "[n/a]";
+
+                    var info = node.Part?.Information;
+                    if (info == null)
+                        return $"<{node.Part?.Identifier}>" ?? "<n/a>";
+
+                    var value = string.IsNullOrEmpty(info.Value) ? "n/a" : $"${info.Value}";
+                    return $" {value,-5} {info.Name}";
+                }
+            }
+        };
+        File.WriteAllText(newFile, new JBeamFile.PartsTree.TreePrinter(config).Print(partsTree.Roots));
+    }    
+
     foreach (var jbeam in jbeams)
     {
         var relativePath = Path.GetRelativePath(sourceDir, jbeam.FilePath);

@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 
 namespace BeamNG.JBeam;
@@ -137,82 +138,124 @@ public partial class JBeamFile
 
     public partial class PartsTree  // Printing
     {
-        public override string ToString() => TreePrinter.Print(Roots);
+        public override string ToString() => new TreePrinter().Print(Roots);
 
-        public static class TreePrinter
-        {
-            private const string Vertical = "\u2502";      // │
-            private const string Branch   = "\u251C";      // ├
-            private const string Corner   = "\u2514";      // └
-            private const string Line     = "\u2500";      // ─
 
-            public static string Print(IEnumerable<Node> roots)
+        public class TreePrinter
+        {            
+            public const string Vertical = "\u2502";      // │
+            public const string Tee      = "\u251C";      // ├
+            public const string Corner   = "\u2514";      // └
+            public const string Line     = "\u2500";      // ─
+            public const string Space    = " ";
+
+            public delegate string NodeLabelCallback(Node node, bool isReference);
+
+            public class Config
             {
-                var sb = new StringBuilder();
+                public const string DefaultPrefix           = Vertical + Space + Space;     // "│  "
+                public const string DefaultPrefixLast       = Space + Space + Space;        // "   "
+                public const string DefaultPrefixBranch     = Tee + Line;     // "├─"
+                public const string DefaultPrefixBranchLast = Corner + Line;   // "└─"
 
-                foreach (var root in roots)
-                    PrintNode(root, "", true, new HashSet<string>(), sb);
+                public string Prefix{ get; set; } = DefaultPrefix;
+                public string PrefixLast { get; set; } = DefaultPrefixLast;
+                public string PrefixBranch { get; set; } = DefaultPrefixBranch;
+                public string PrefixBranchLast { get; set; } = DefaultPrefixBranchLast;
 
-                return sb.ToString();
+                public static string DefaultRefLabel(string id)
+                    => $"Part: {id} (ref)";
+                public static string DefaultNodeLabel(Node node)
+                {
+                    return node.Type switch
+                    {
+                        NodeType.Part => "Part: " + node.Part!.Identifier,
+                        NodeType.Slot => SlotLabel(node.Slot!),
+                        _ => "Unknown"
+                    };
+                }
+                private static string SlotLabel(Slot slot)
+                {
+                    var allow = string.Join(", ", slot.AllowTypes);
+                    var deny  = string.Join(", ", slot.DenyTypes);
+                    return "Slot: " + slot.Name +
+                        " (allow: [" + allow + "] deny: [" + deny + "])";
+                }
+
+                public NodeLabelCallback? LabelCallback { get; set; } = default;
             }
 
-            private static void PrintNode(Node node, string prefix, bool isLast, HashSet<string> visitedParts, StringBuilder sb)
+
+            private readonly Config _config;
+            private readonly HashSet<string> _printedParts = new();
+            private readonly StringBuilder _sb = new();
+
+            public TreePrinter(Config? config = null)
             {
-                // Cycle detection
+                _config = config ?? new Config();
+            }
+
+            private NodeLabelCallback? _labelCallback => _config.LabelCallback;
+
+            public string Print(IEnumerable<Node> roots)
+            {
+                foreach (var root in roots)
+                    PrintNode(root, "", true);
+
+                return _sb.ToString();
+            }
+
+            private void PrintNode(Node node, string prefix, bool isLast)
+            {
+                string branch = GetPrefix(true, isLast);
+
+                // Compressed Part printing
                 if (node.IsPart)
                 {
-                    if (visitedParts.Contains(node.Part.Identifier))
+                    var id = node.Part!.Identifier;
+
+                    if (_printedParts.Contains(id))
                     {
-                        sb.Append(prefix)
-                        .Append(Corner).Append(Line).Append(Line)
-                        .Append(" [cycle detected: ").Append(NodeLabel(node)).Append("]\n");
+                        var refLabel = _labelCallback?.Invoke(node, true) ?? Config.DefaultRefLabel(id);
+                        if (!string.IsNullOrEmpty(refLabel))
+                            _sb.Append(prefix)
+                            .Append(branch)
+                            .Append(refLabel)
+                            .Append('\n');
                         return;
                     }
 
-                    visitedParts.Add(node.Part.Identifier);
+                    _printedParts.Add(id);
                 }
 
-                // Choose branch characters
-                string branch = isLast
-                    ? Corner + " "     // └─
-                    : Branch + " ";   // ├   
-
-                // Print this node
-                sb.Append(prefix).Append(branch).Append(NodeLabel(node)).Append('\n');
+                // Normal printing
+                var nodeLabel = _labelCallback?.Invoke(node, false) ?? Config.DefaultNodeLabel(node);
+                if (!string.IsNullOrEmpty(nodeLabel))
+                    _sb.Append(prefix)
+                    .Append(branch)
+                    .Append(nodeLabel)
+                    .Append('\n');
 
                 // Prepare next prefix
-                string childPrefix = prefix + (isLast ? "  " : Vertical + " ");
+                string childPrefix = prefix + GetPrefix(false, isLast);
 
                 // Print children
                 for (int i = 0; i < node.Children.Count; i++)
                 {
-                    bool lastChild = (i == node.Children.Count - 1);
-                    PrintNode(node.Children[i], childPrefix, lastChild, visitedParts, sb);
+                    bool lastChild = i == node.Children.Count - 1;
+                    PrintNode(node.Children[i], childPrefix, lastChild);
                 }
-
-                if (node.IsPart)
-                    visitedParts.Remove(node.Part.Identifier);
             }
 
-            private static string NodeLabel(Node node)
+            public string GetPrefix(bool branch, bool isLast)
             {
-                return node.Type switch
-                {
-                    NodeType.Part => "Part: " + node.Part!.Identifier,
-                    NodeType.Slot => SlotLabel(node.Slot!),
-                    _ => "Unknown"
-                };
-            }
-
-            private static string SlotLabel(Slot slot)
-            {
-                var allow = string.Join(", ", slot.AllowTypes);
-                var deny  = string.Join(", ", slot.DenyTypes);
-
-                return "Slot: " + slot.Name;
-                    //+ " (allow: [" + allow + "] deny: [" + deny + "])";
+                if (branch)
+                    return isLast ? _config.PrefixBranchLast : _config.PrefixBranch;
+                else
+                    return isLast ? _config.PrefixLast : _config.Prefix;
             }
         }
+
 
     }
     
