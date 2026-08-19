@@ -36,12 +36,19 @@ public abstract record Key
 }
 public record KeyTrivia : Key;
 public record KeyAnonymous : Key;
-public record KeyNamed(string Name, TextRegion Location) : Key;
-public record NodeEntry(Key Key, Node Value)
+public record KeyNamed(string Name, TextRegion Region) : Key
+{
+    public override string ToString() => Name;
+}
+public partial record NodeEntry(Key Key, Node Value)
 {
     public string Name => Key.Named?.Name ?? "";
+    public TextRegion Region => new(Key.Named?.Region.Start ?? Value.Region.Start, Value.Region.End);
+
     public T? As<T>() where T : Node
         => (Value is T t) ? t : null;
+
+    public override string ToString() => ToString(new StringFormat()).Str;
 }
 
 

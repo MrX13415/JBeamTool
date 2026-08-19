@@ -11,14 +11,18 @@ void InitJBeam(string sourceDir)
 {
     JBeamFile.OnLoadFile += (jbeam) => {
         var relativePath = Path.GetRelativePath(sourceDir, jbeam.FilePath);
-        Print($"File: {relativePath} [{jbeam.Parts.Count} parts, {jbeam.GetTranslationKeys().Count()} translation keys]");
+        Print($"   {relativePath} [{jbeam.Parts.Count} parts, {jbeam.GetTranslationKeys().Count()} translation keys]");
         foreach (var warning in jbeam.GetWarnings())
-            Print($"   Warning: {warning}");
+            Print($"      Warning: {warning}");
     };
 }
 
 void Run_Keys()
 {
+    Print();
+    Print($"Report missing translation keys.");
+    Print();
+
     var args = Environment.GetCommandLineArgs();
     string sourceDir = args.Length > 2 ? args[2] : Directory.GetCurrentDirectory();
 
@@ -30,9 +34,13 @@ void Run_Keys()
 
     sourceDir = Path.GetFullPath(sourceDir);
     Print($"Source: {sourceDir}");
+    Print();
 
+    Print("Loading JBeam files...");
     InitJBeam(sourceDir);
     var jbeams = JBeamFile.LoadFiles(sourceDir);
+    Print();
+
     /*
     Print("");
     Print("Parts:");
@@ -75,7 +83,6 @@ void Run_Keys()
     }
     */
 
-    Print("");
     Print("Missing Translation Keys:");
     var translationKeys = JBeamFile.TranslationKey.MissingKeys(jbeams);
     translationKeys.Sort((a, b) => string.Compare(a.Key, b.Key));
@@ -87,6 +94,10 @@ void Run_Keys()
 
 void Run_Dump()
 {
+    Print();
+    Print($"Dump JBeam files into a folder.");
+    Print();
+
     var args = Environment.GetCommandLineArgs();
     string sourceDir = args.Length > 2 ? args[2] : Directory.GetCurrentDirectory();
     string targetDir = args.Length > 3 ? args[3] : Directory.GetCurrentDirectory();
@@ -101,11 +112,13 @@ void Run_Dump()
     targetDir = Path.GetFullPath(targetDir);
     Print($"Source: {sourceDir}");
     Print($"Target: {targetDir}");
+    Print();
 
+    Print("Loading JBeam files...");
     InitJBeam(sourceDir);
     var jbeams = JBeamFile.LoadFiles(sourceDir);
+    Print();
 
-    Print("");
     foreach (var jbeam in jbeams)
     {
         var relativePath = Path.GetRelativePath(sourceDir, jbeam.FilePath);
@@ -120,6 +133,10 @@ void Run_Dump()
 
 void Run_Slots2()
 {
+    Print();
+    Print($"Convert to Slots2 format.");
+    Print();
+
     var args = Environment.GetCommandLineArgs();
     string sourceDir = args.Length > 2 ? args[2] : Directory.GetCurrentDirectory();
     string targetDir = args.Length > 3 ? args[3] : Directory.GetCurrentDirectory();
@@ -134,21 +151,30 @@ void Run_Slots2()
     targetDir = Path.GetFullPath(targetDir);
     Print($"Source: {sourceDir}");
     Print($"Target: {targetDir}");
+    Print();
 
+    Print("Loading JBeam files...");
     InitJBeam(sourceDir);
     var jbeams = JBeamFile.LoadFiles(sourceDir);
-
-    Print("");
+    Print();
+    
     foreach (var jbeam in jbeams)
     {
         var relativePath = Path.GetRelativePath(sourceDir, jbeam.FilePath);
+
+        var convertedParts = jbeam.ConvertFormat_Slots2();
+        if (convertedParts.Count == 0)
+            continue;
+            
         Print($"File: {relativePath}");
+        foreach (var partName in convertedParts)
+        {
+            Print($"   Part: {partName}");
+        }
 
-
-
-        // var newFile = Path.GetFullPath(Path.Combine(targetDir, relativePath));
-        // Directory.CreateDirectory(Path.GetDirectoryName(newFile)!);
-        // File.WriteAllText(newFile, content);
+        var newFile = Path.GetFullPath(Path.Combine(targetDir, relativePath));
+        Directory.CreateDirectory(Path.GetDirectoryName(newFile)!);
+        File.WriteAllText(newFile, jbeam.FileContent);
     }
 }
 
@@ -164,6 +190,10 @@ void Run()
             Run_Keys();
             break;
 
+        case "slots2":
+            Run_Slots2();
+            break;
+
         case "dump":
             Run_Dump();
             break;
@@ -173,7 +203,8 @@ void Run()
             Print();
             Print("Commands:");
             Print("   keys [sourceDir] - Show missing translation keys.");
-            Print("   dump [sourceDir] [targetDir] - Dump parsed files into the given folder.");
+            Print("   slots2 [sourceDir] [targetDir] - Convert JBeam files to Slots2 format.");
+            Print("   dump [sourceDir] [targetDir] - Dump parsed JBeam files into the given folder.");
             break;
     }
 

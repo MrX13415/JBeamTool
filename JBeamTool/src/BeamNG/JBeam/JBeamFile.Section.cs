@@ -26,6 +26,8 @@ public partial class JBeamFile
         public static SectionType GetType(string key) 
             => Enum.TryParse(key, true, out SectionType result) ? result : SectionType.Unknown;
 
+        public TextRegion Region => Node.Region;
+            
         public static Section New(NodeEntry node) => GetType(node.Name) switch
         {
             SectionType.Information => new InformationSection(node),

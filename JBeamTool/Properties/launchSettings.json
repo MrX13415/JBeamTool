@@ -10,7 +10,7 @@
     },
     "Slot2": {
       "commandName": "Project",
-      "commandLineArgs": "slots2 C:\\Users\\MrX13\\AppData\\Local\\BeamNG\\BeamNG.drive\\current\\mods\\unpacked\\bug\\vehicles\\bug"
+      "commandLineArgs": "slots2 C:\\Users\\MrX13\\AppData\\Local\\BeamNG\\BeamNG.drive\\current\\mods\\unpacked\\bug\\vehicles\\bug slots2"
     }
   }
 }

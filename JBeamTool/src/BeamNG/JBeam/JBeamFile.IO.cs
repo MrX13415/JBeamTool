@@ -1,4 +1,6 @@
 
+using System.Dynamic;
+
 namespace BeamNG.JBeam;
 
 public partial class JBeamFile
@@ -80,7 +82,10 @@ public partial class JBeamFile
         }
         return jbeams;
     }
-    public string ReadFileContent() => File.ReadAllText(FilePath);
+    public static IEnumerable<string> EnumerateFiles(string directory, SearchOption searchOption = SearchOption.AllDirectories)
+    {
+        return Directory.EnumerateFiles(directory, "*.jbeam", searchOption);
+    }
 
 
     public ObjectNode Parse() => ParseText(FileContent);
@@ -92,9 +97,75 @@ public partial class JBeamFile
         return root;
     }
 
+}
 
-    public static IEnumerable<string> EnumerateFiles(string directory, SearchOption searchOption = SearchOption.AllDirectories)
+public partial class JBeamFile
+{
+    public class ContentLines : List<string>
     {
-        return Directory.EnumerateFiles(directory, "*.jbeam", searchOption);
+        public ContentLines(IEnumerable<string> lines) : base(lines) { }
+
+        public int? GetLine(TextLocation location)
+            => (location.Line < 1 || location.Line > Count) ? null : location.Line - 1; // Convert to 0-based index
+        public (int Index, int Count)? GetLines(TextRegion region)
+        {
+            int? startIndex = GetLine(region.Start);
+            int? endIndex = GetLine(region.End);
+            if (startIndex == null || endIndex == null || startIndex > endIndex)
+                return null;
+            return (startIndex.Value, endIndex.Value - startIndex.Value + 1);
+        }
+
+        public int GetIndent(int index, int size = 2)
+        {
+            if (index < 0 || index >= Count)
+                throw new ArgumentOutOfRangeException(nameof(index), $"Index {index} is out of range for lines count {Count}.");
+
+            var line = this[index];
+            int indent = 0;
+            foreach (var ch in line)
+            {
+                if (ch == ' ' || ch == '\t')
+                    indent++;
+                else
+                    break;
+            }
+
+            if (size > 0)
+                indent = indent / size;
+
+            return indent;
+        }
+        public int GetIndent(TextLocation location, int size = 2)
+        {
+            var lineIndex = GetLine(location);
+            if (lineIndex == null)
+                throw new ArgumentException($"Invalid location: {location}");
+            return GetIndent(lineIndex.Value, size);
+        }
+
+        public void Set(ContentLines newLines, TextRegion region)
+        {
+            var lineRange = GetLines(region);
+            if (lineRange == null)
+                throw new ArgumentException($"Invalid region: {region}");
+
+            this.RemoveRange(lineRange.Value.Index, lineRange.Value.Count);
+            this.InsertRange(lineRange.Value.Index, newLines);
+        }
+
+        public static ContentLines FromString(string? content)
+        {
+            if (content == null) return new ContentLines(Array.Empty<string>());
+            var lines = content.Split(["\r\n", "\r", "\n"], StringSplitOptions.None);
+            return new ContentLines(lines);
+        }
+        public override string ToString() => ToString("\r\n");
+        public string ToString(string lineEndCharacter) => string.Join(lineEndCharacter, this.Where(l => l != null));
     }
+
+    public string ReadFileContent() => File.ReadAllText(FilePath);
+    public ContentLines GetLines() => ContentLines.FromString(FileContent);
+    public string SetLines(ContentLines lines) => FileContent = lines.ToString(GetLineEndCharacter());
+    public string GetLineEndCharacter() => FileContent.Contains("\r\n") ? "\r\n" : FileContent.Contains("\r") ? "\r" : "\n";
 }

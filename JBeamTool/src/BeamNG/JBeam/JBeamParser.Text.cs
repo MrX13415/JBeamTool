@@ -23,6 +23,31 @@ public record class StringFormat
 public record class NodeString(string Str, Node Node);
 
 
+public partial record NodeEntry
+{
+    public NodeString ToString(StringFormat format)
+    {
+        string pad = format.Pad();
+
+        switch(Key)
+        {
+            default:
+            case KeyAnonymous:
+                var anonValue = Value.ToString(format).Trim();
+                return new NodeString($"{pad}{anonValue}", Value);
+
+            case KeyTrivia:
+                return (Value is EmptyLineNode)
+                    ? new NodeString($"{Value.ToString(format).Trim()}", Value)
+                    : new NodeString($"{pad}{Value.ToString(format).Trim()}", Value);
+
+            case KeyNamed namedKey:
+                var value = Value.ToString(format).Trim();
+                return new NodeString($"{pad}\"{namedKey.Name}\": {value}", Value);
+        }
+    }
+}
+
 public partial class ValueNode : Node
 {
     public override string ToString(StringFormat format)
@@ -197,26 +222,7 @@ public partial class ObjectNode : Node
     {
         string pad = format.Pad();
         foreach (var kv in Properties)
-        {
-            switch(kv.Key)
-            {
-                case KeyTrivia:
-                    yield return (kv.Value is EmptyLineNode)
-                        ? new NodeString($"{kv.Value.ToString(format).Trim()}", kv.Value)
-                        : new NodeString($"{pad}{kv.Value.ToString(format).Trim()}", kv.Value);
-                    break;
-
-                case KeyNamed namedKey:
-                    var value = kv.Value.ToString(format).Trim();
-                    yield return new NodeString($"{pad}\"{namedKey.Name}\": {value}", kv.Value);
-                    break;
-
-                case KeyAnonymous:
-                    var anonValue = kv.Value.ToString(format).Trim();
-                    yield return new NodeString($"{pad}{anonValue}", kv.Value);
-                    break;
-            }
-        }
+            yield return kv.ToString(format);
     }
 }
 
@@ -240,13 +246,11 @@ public partial class JsonNode : ObjectNode
     }
 }
 
-static partial class JBeamExtensions
+public static partial class JBeamExtensions
 {
     public static ArrayFormat Next(this ArrayFormat format) => format < JBeam.ArrayFormat.Inline ? format + 1 : format;
 }
-
-
-public static class StringExtensions
+public static partial class StringExtensions
 {
     public static readonly Dictionary<string, char> JsonEscapeMap = new()
     {
@@ -323,4 +327,5 @@ public static class StringExtensions
 
         return sb;
     }
+
 }
