@@ -1,5 +1,7 @@
 
-public abstract class BeamNG
+namespace BeamNG.App;
+
+public abstract class BeamNGFolder
 {
     public static string Root
     {
@@ -12,15 +14,15 @@ public abstract class BeamNG
         }
     }
 
-    public static string UserFolder 
+    public static string User 
         => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "BeamNG", "BeamNG.drive", "current");
-    public static string ModsFolder 
-        => Path.Combine(UserFolder, "mods");
-    public static string UnpackedModsFolder 
-        => Path.Combine(ModsFolder, "unpacked");
+    public static string Mods 
+        => Path.Combine(User, "mods");
+    public static string UnpackedMods 
+        => Path.Combine(Mods, "unpacked");
     
-    public static string TranslationsFolder
-        => Path.Combine(Root, TranslationsRelativePath);
-    public static string TranslationsRelativePath
+    public static string Translations
+        => Path.Combine(Root, TranslationsFolderName);
+    public static string TranslationsFolderName
         => Path.Combine("locales", "translations");
 }

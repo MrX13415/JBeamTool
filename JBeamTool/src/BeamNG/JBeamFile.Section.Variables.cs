@@ -1,5 +1,7 @@
 
-partial class JBeam
+namespace BeamNG.JBeam;
+
+public partial class JBeamFile
 {
     
     public record class Variable

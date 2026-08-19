@@ -1,19 +1,12 @@
 
-partial class JBeam
+namespace BeamNG.JBeam;
+
+public partial class JBeamFile
 {
-    public string FilePath { get; set; } = string.Empty;
-    public ObjectNode Root { get; set; } = new();
-    public List<Part> Parts { get; set; } = new();
-
-    public JBeam(string filePath)
-    {
-        FilePath = Path.GetFullPath(filePath);
-    }
-
-    public delegate void LoadFileEvent(JBeam jBeam);
+    public delegate void LoadFileEvent(JBeamFile jBeamFile);
     public static event LoadFileEvent? OnLoadFile;
 
-    public bool Load()
+    public bool LoadFile()
     {
         if (!File.Exists(FilePath))
         {
@@ -23,7 +16,8 @@ partial class JBeam
 
         try
         {
-            Root = JBeam.Parse(FileContent);
+            FileContent = ReadFileContent();
+            Root = Parse();
             Parts.Clear();
 
             foreach (var kv in Root.Properties)
@@ -62,25 +56,22 @@ partial class JBeam
             return false;
         }
     }
-    public string FileContent => File.ReadAllText(FilePath);
-    public bool Sanity => Root.PropertiesNamed.Count == Parts.Count;
-
-    public static List<JBeam> LoadPath(string path)
+    public static List<JBeamFile> LoadFiles(string path)
     {
-       List<JBeam> jbeams = new();
+       List<JBeamFile> jbeams = new();
 
         path = Path.GetFullPath(path);
         if (File.Exists(path))
         {
-            var jbeam = new JBeam(path);
-            if (jbeam.Load()) jbeams.Add(jbeam);
+            var jbeam = new JBeamFile(path);
+            if (jbeam.LoadFile()) jbeams.Add(jbeam);
         }
         else if (Directory.Exists(path))
         {
             foreach (var file in EnumerateFiles(path))
             {
-                var jbeam = new JBeam(file);
-                if (jbeam.Load()) jbeams.Add(jbeam);
+                var jbeam = new JBeamFile(file);
+                if (jbeam.LoadFile()) jbeams.Add(jbeam);
             }
         }
         else
@@ -89,14 +80,21 @@ partial class JBeam
         }
         return jbeams;
     }
+    public string ReadFileContent() => File.ReadAllText(FilePath);
+
+
+    public ObjectNode Parse() => ParseText(FileContent);
+    public static ObjectNode ParseText(string jbeamText)
+    {
+        var lexer = new JBeamLexer(jbeamText);
+        var parser = new JBeamParser(lexer.LexAll());
+        ObjectNode root = parser.ParseFile();
+        return root;
+    }
+
+
     public static IEnumerable<string> EnumerateFiles(string directory, SearchOption searchOption = SearchOption.AllDirectories)
     {
         return Directory.EnumerateFiles(directory, "*.jbeam", searchOption);
     }
-
-    private readonly List<string> _warnings = new();
-    public IReadOnlyList<string> GetWarnings() => _warnings;
-    public void ClearWarnings() => _warnings.Clear();
-    protected void Warn(string message) => _warnings.Add(message);
-
 }

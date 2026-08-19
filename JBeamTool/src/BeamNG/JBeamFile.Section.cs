@@ -1,7 +1,7 @@
 
-using System.Runtime.CompilerServices;
+namespace BeamNG.JBeam;
 
-partial class JBeam
+public partial class JBeamFile
 {
     public enum SectionType
     {

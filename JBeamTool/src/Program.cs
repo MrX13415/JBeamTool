@@ -1,4 +1,6 @@
 ﻿
+using BeamNG.JBeam;
+
 void Print(string message = "")
 {
     Console.WriteLine(message);
@@ -7,7 +9,7 @@ void Print(string message = "")
 
 void InitJBeam(string sourceDir)
 {
-    JBeam.OnLoadFile += (jbeam) => {
+    JBeamFile.OnLoadFile += (jbeam) => {
         var relativePath = Path.GetRelativePath(sourceDir, jbeam.FilePath);
         Print($"File: {relativePath} [{jbeam.Parts.Count} parts, {jbeam.GetTranslationKeys().Count()} translation keys]");
         foreach (var warning in jbeam.GetWarnings())
@@ -30,7 +32,7 @@ void Run_Keys()
     Print($"Source: {sourceDir}");
 
     InitJBeam(sourceDir);
-    var jbeams = JBeam.LoadPath(sourceDir);
+    var jbeams = JBeamFile.LoadFiles(sourceDir);
     /*
     Print("");
     Print("Parts:");
@@ -75,7 +77,7 @@ void Run_Keys()
 
     Print("");
     Print("Missing Translation Keys:");
-    var translationKeys = JBeam.TranslationKey.MissingKeys(jbeams);
+    var translationKeys = JBeamFile.TranslationKey.MissingKeys(jbeams);
     translationKeys.Sort((a, b) => string.Compare(a.Key, b.Key));
     foreach (var (key, value) in translationKeys.Distinct())
     {
@@ -101,7 +103,7 @@ void Run_Dump()
     Print($"Target: {targetDir}");
 
     InitJBeam(sourceDir);
-    var jbeams = JBeam.LoadPath(sourceDir);
+    var jbeams = JBeamFile.LoadFiles(sourceDir);
 
     Print("");
     foreach (var jbeam in jbeams)
@@ -115,7 +117,6 @@ void Run_Dump()
         File.WriteAllText(newFile, content);
     }
 }
-
 
 void Run()
 {
