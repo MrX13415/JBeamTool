@@ -17,7 +17,7 @@ public partial class JBeamFile
             Sections = BuildSections();
         }
 
-        public string? Name => Node.Name;
+        public string? Identifier => Node.Name;
         public ObjectNode Object() => Node.As<ObjectNode>()!;
 
         public List<Section> BuildSections()

@@ -41,48 +41,6 @@ void Run_Keys()
     var jbeams = JBeamFile.LoadFiles(sourceDir);
     Print();
 
-    /*
-    Print("");
-    Print("Parts:");
-    foreach (var jbeam in jbeams)
-    {
-        var relativePath = Path.GetRelativePath(sourceDir, jbeam.FilePath);
-        Print($"File: {relativePath}");
-        foreach (var part in jbeam.Parts)
-        {
-            var partUIName = part.Information?.Name ?? "(unnamed)";
-            Print($"   Part: '{partUIName}' [{part.Name}]");
-            if (part.Slots != null)
-            {
-                foreach (var slot in part.Slots.Slots)
-                {
-                    Print($"      Slot: '{slot.Description}' [{slot.Name}]");
-                }
-            }
-            if (part.Variables != null)
-            {
-                foreach (var variable in part.Variables.Variables)
-                {
-                    Print($"      Variable: '{variable.Description}' ({variable.Name})");
-                }
-            }
-            if (part.Flexbodies != null)
-            {
-                foreach (var flexbody in part.Flexbodies.Flexbodies)
-                {
-                    List<string> details = new();
-                    if (flexbody.Groups.Count > 0) 
-                        details.Add($"Groups: {string.Join(", ", flexbody.Groups)}");
-                    if (flexbody.Json != null) 
-                        details.Add("Json: {...}");
-
-                    Print($"      Flexbody: '{flexbody.Mesh}' ({string.Join(", ", details)})");
-                }
-            }
-        }
-    }
-    */
-
     Print("Missing Translation Keys:");
     var translationKeys = JBeamFile.TranslationKey.MissingKeys(jbeams);
     translationKeys.Sort((a, b) => string.Compare(a.Key, b.Key));
@@ -178,6 +136,50 @@ void Run_Slots2()
     }
 }
 
+void Run_PriceList()
+{
+    Print();
+    Print($"Part price list.");
+    Print();
+
+    var args = Environment.GetCommandLineArgs();
+    string sourceDir = args.Length > 2 ? args[2] : Directory.GetCurrentDirectory();
+
+    if (!Directory.Exists(sourceDir))
+    {
+        Print($"Source directory does not exist: {sourceDir}");
+        return;
+    }
+
+    sourceDir = Path.GetFullPath(sourceDir);
+    Print($"Source: {sourceDir}");
+    Print();
+
+    Print("Loading JBeam files...");
+    InitJBeam(sourceDir);
+    var jbeams = JBeamFile.LoadFiles(sourceDir);
+    Print();
+    
+    foreach (var jbeam in jbeams)
+    {
+        var relativePath = Path.GetRelativePath(sourceDir, jbeam.FilePath);
+
+        Print($"File: {relativePath}");
+        foreach (var part in jbeam.Parts)
+        {
+            var info = part.Information;
+            if (info == null)
+            {
+                Print($"   Part: {part.Identifier} - No information section.");
+                continue;
+            }
+
+            var authors = string.Join(", ", info.Authors);
+            var value = string.IsNullOrEmpty(info.Value) ? "<n/a>" : $"${info.Value}";
+            Print($"    {value,-5} - Part: {info.Name} (by {authors})");
+        }
+    }
+}
 
 void Run()
 {
@@ -198,6 +200,10 @@ void Run()
             Run_Dump();
             break;
 
+        case "pricelist":
+            Run_PriceList();
+            break;
+
         default:
             Print("Usage: JBeamTool.exe <command> <args>");
             Print();
@@ -205,6 +211,7 @@ void Run()
             Print("   keys [sourceDir] - Show missing translation keys.");
             Print("   slots2 [sourceDir] [targetDir] - Convert JBeam files to Slots2 format.");
             Print("   dump [sourceDir] [targetDir] - Dump parsed JBeam files into the given folder.");
+            Print("   pricelist [sourceDir] - Show part price list.");
             break;
     }
 

@@ -24,7 +24,7 @@ public partial class JBeamFile
             var newLines = ContentLines.FromString(newText.Str);
             lines.Set(newLines, region);
 
-            convertedParts.Add(part.Name ?? "<unknown>");
+            convertedParts.Add(part.Identifier ?? "<unknown>");
         }
 
         SetLines(lines);
