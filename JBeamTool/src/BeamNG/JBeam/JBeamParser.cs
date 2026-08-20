@@ -64,7 +64,8 @@ public class JBeamParser
             Node value = ParseValue();
             obj.Add(key, value);
 
-            Match(TokenType.Comma); // optional comma
+            // Consume optional or consecutive commas
+            while (Match(TokenType.Comma));
         }
 
         var end = Consume(TokenType.RBrace).Location;
@@ -132,8 +133,8 @@ public class JBeamParser
             var value = ParseValue();
             arr.Items.Add(value);
 
-            // If comma → consume and continue
-            if (Match(TokenType.Comma))
+            // Consume optional or consecutive commas
+            while (Match(TokenType.Comma))
                 continue;
 
             // If next token starts a new value → allow missing comma
