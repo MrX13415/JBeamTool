@@ -1,4 +1,5 @@
 ﻿
+using System.Text;
 using BeamNG.JBeam;
 
 void Print(string message = "")
@@ -23,8 +24,19 @@ void Run_Keys()
     Print($"Report missing translation keys.");
     Print();
 
-    var args = Environment.GetCommandLineArgs();
-    string sourceDir = args.Length > 2 ? args[2] : Directory.GetCurrentDirectory();
+    var args = Environment.GetCommandLineArgs().Skip(2);
+    string langCode = "en-US";
+    string sourceDir = Directory.GetCurrentDirectory();
+    if (args.Count() > 0 && BeamNG.App.BeamNGFolder.IsLanguageCode(args.First()))
+    {
+        langCode = args.First();
+        args = args.Skip(1);      
+    }
+    if (args.Count() > 0)
+    {
+        sourceDir = args.First();
+        args = args.Skip(1);
+    }
 
     if (!Directory.Exists(sourceDir))
     {
@@ -34,6 +46,7 @@ void Run_Keys()
 
     sourceDir = Path.GetFullPath(sourceDir);
     Print($"Source: {sourceDir}");
+    Print($"Language Code: {langCode}");
     Print();
 
     Print("Loading JBeam files...");
@@ -41,8 +54,8 @@ void Run_Keys()
     var jbeams = JBeamFile.LoadFiles(sourceDir);
     Print();
 
-    Print("Missing Translation Keys:");
-    var translationKeys = JBeamFile.TranslationKey.MissingKeys(jbeams);
+    Print($"Missing Translation Keys in '{langCode}':");
+    var translationKeys = JBeamFile.TranslationKey.MissingKeys(langCode, jbeams);
     translationKeys.Sort((a, b) => string.Compare(a.Key, b.Key));
     foreach (var (key, value) in translationKeys.Distinct())
     {
@@ -142,8 +155,15 @@ void Run_PriceList()
     Print($"Part price list.");
     Print();
 
+    bool IsSwitch(string arg) => arg.StartsWith("-") || arg.StartsWith("/");
+
     var args = Environment.GetCommandLineArgs();
+    var switches = args.Where(IsSwitch).ToList();
+    args = args.Where(arg => !IsSwitch(arg)).ToArray();
     string sourceDir = args.Length > 2 ? args[2] : Directory.GetCurrentDirectory();
+    string? targetFile = args.Length > 3 ? args[3] : null;
+
+    bool showTree = switches.Any(s => s.Equals("-tree", StringComparison.OrdinalIgnoreCase) || s.Equals("/tree", StringComparison.OrdinalIgnoreCase));
 
     if (!Directory.Exists(sourceDir))
     {
@@ -153,6 +173,14 @@ void Run_PriceList()
 
     sourceDir = Path.GetFullPath(sourceDir);
     Print($"Source: {sourceDir}");
+    if (targetFile != null) 
+    {
+        targetFile = Path.GetFullPath(targetFile);
+        if (Directory.Exists(targetFile))
+            targetFile = Path.Combine(targetFile, "pricelist.txt");
+        Print($"Target: {targetFile}");
+    }
+
     Print();
 
     Print("Loading JBeam files...");
@@ -160,14 +188,9 @@ void Run_PriceList()
     var jbeams = JBeamFile.LoadFiles(sourceDir);
     Print();
     
-
-    JBeamFile.PartsTree partsTree = new(jbeams);
+    string GetTree()
     {
-        var newFile = Path.GetFullPath(Path.Combine(".", "parts_tree.txt"));
-        File.WriteAllText(newFile, partsTree.ToString());
-    }
-    {
-        var newFile = Path.GetFullPath(Path.Combine(".", "price_tree.txt"));
+        JBeamFile.PartsTree partsTree = new(jbeams);
         JBeamFile.PartsTree.TreePrinter.Config config = new()
         {
             LabelCallback = (node, isRef) =>
@@ -187,27 +210,44 @@ void Run_PriceList()
                 }
             }
         };
-        File.WriteAllText(newFile, new JBeamFile.PartsTree.TreePrinter(config).Print(partsTree.Roots));
-    }    
-
-    foreach (var jbeam in jbeams)
+        return new JBeamFile.PartsTree.TreePrinter(config).Print(partsTree.Roots);
+    }
+    string GetList()
     {
-        var relativePath = Path.GetRelativePath(sourceDir, jbeam.FilePath);
-
-        Print($"File: {relativePath}");
-        foreach (var part in jbeam.Parts)
+        StringBuilder sb = new();
+        foreach (var jbeam in jbeams)
         {
-            var info = part.Information;
-            if (info == null)
-            {
-                Print($"   Part: {part.Identifier} - No information section.");
-                continue;
-            }
+            var relativePath = Path.GetRelativePath(sourceDir, jbeam.FilePath);
 
-            var authors = string.Join(", ", info.Authors);
-            var value = string.IsNullOrEmpty(info.Value) ? "<n/a>" : $"${info.Value}";
-            Print($"    {value,-5} - Part: {info.Name} (by {authors})");
+            sb.AppendLine($"File: {relativePath}");
+            foreach (var part in jbeam.Parts)
+            {
+                var info = part.Information;
+                if (info == null)
+                {
+                    sb.AppendLine($"   Part: {part.Identifier} - No information section.");
+                    continue;
+                }
+
+                var authors = string.Join(", ", info.Authors);
+                var value = string.IsNullOrEmpty(info.Value) ? "<n/a>" : $"${info.Value}";
+                sb.AppendLine($"    {value,-5} - Part: {info.Name}");
+            }            
         }
+
+        return sb.ToString();
+    }
+
+    string content = showTree ? GetTree() : GetList();
+    if (targetFile == null)
+    {
+        Print(content);
+        
+    }
+    else
+    {
+        Print("Writing to file...");
+        File.WriteAllText(targetFile, content);
     }
 }
 
@@ -238,10 +278,10 @@ void Run()
             Print("Usage: JBeamTool.exe <command> <args>");
             Print();
             Print("Commands:");
-            Print("   keys [sourceDir] - Show missing translation keys.");
-            Print("   slots2 [sourceDir] [targetDir] - Convert JBeam files to Slots2 format.");
-            Print("   dump [sourceDir] [targetDir] - Dump parsed JBeam files into the given folder.");
-            Print("   pricelist [sourceDir] - Show part price list.");
+            Print("   keys [lang] <sourceDir> - Show missing translation keys.");
+            Print("   slots2 <sourceDir> <targetDir> - Convert JBeam files to Slots2 format.");
+            Print("   dump <sourceDir> <targetDir> - Dump parsed JBeam files into the given folder.");
+            Print("   pricelist [-tree] <sourceDir> [targetFile] - Show part price list.");
             break;
     }
 

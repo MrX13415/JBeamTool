@@ -25,15 +25,18 @@ public partial class JBeamFile
             return new TranslationKey($"{prefix}{str.JsonEscape()}", str.JsonEscape());
         }
 
-        public static List<TranslationKey> LoadReference()
+        public static List<TranslationKey> LoadReference(string langCode = "en-US")
         {
-            return LoadReference(new List<string> {                 
+            return LoadReference(langCode, new List<string> {                 
                 Path.Combine(BeamNGFolder.Translations),  // official game translations
                 Path.Combine(BeamNGFolder.UnpackedMods)   // Search for translations in unpacked mods
             });
         }
-        public static List<TranslationKey> LoadReference(List<string> dirs)
+        public static List<TranslationKey> LoadReference(string langCode, List<string> dirs)
         {
+            if (string.IsNullOrEmpty(langCode))
+                langCode = "en-US";
+
             List<TranslationKey> keys = new();
             foreach (var dir in dirs)
             {
@@ -44,7 +47,7 @@ public partial class JBeamFile
                 }
                 var files = Directory.EnumerateFiles(dir, @"*.json", SearchOption.AllDirectories)
                     .Where(f => f.Contains(BeamNGFolder.TranslationsFolderName))
-                    .Where(f => f.Contains("en-US")); // English is the reference language. Keys must be here.
+                    .Where(f => f.Contains(langCode)); // English is the reference language. Keys must be here.
 
                 foreach (var file in files)
                 {
@@ -57,9 +60,9 @@ public partial class JBeamFile
             return keys;
         }
   
-        public static List<TranslationKey> MissingKeys(List<TranslationKey> keys)
+        public static List<TranslationKey> MissingKeys(string langeCode, List<TranslationKey> keys)
         {
-            List<TranslationKey> refKeys = LoadReference();
+            List<TranslationKey> refKeys = LoadReference(langeCode);
             List<TranslationKey> missingKeys = new();
             foreach (var key in keys)
             {
@@ -70,10 +73,10 @@ public partial class JBeamFile
             }
             return missingKeys;
         }
-        public static List<TranslationKey> MissingKeys(List<JBeamFile> jBeams)
+        public static List<TranslationKey> MissingKeys(string langeCode, List<JBeamFile> jBeams)
         {
             var keys = jBeams.SelectMany(j => j.GetTranslationKeys()).ToList();
-            return MissingKeys(keys);
+            return MissingKeys(langeCode, keys);
         }
 
     }

@@ -2,19 +2,19 @@
   "profiles": {
     "Keys": {
       "commandName": "Project",
-      "commandLineArgs": "keys C:\\Users\\MrX13\\AppData\\Local\\BeamNG\\BeamNG.drive\\current\\mods\\unpacked\\bug\\vehicles\\bug"
+      "commandLineArgs": "keys en-US C:\\Users\\MrX13\\AppData\\Local\\BeamNG\\BeamNG.drive\\current\\mods\\unpacked"
     },
     "Dump": {
       "commandName": "Project",
-      "commandLineArgs": "dump C:\\Users\\MrX13\\AppData\\Local\\BeamNG\\BeamNG.drive\\current\\mods\\unpacked\\bug\\vehicles\\bug output"
+      "commandLineArgs": "dump C:\\Users\\MrX13\\AppData\\Local\\BeamNG\\BeamNG.drive\\current\\mods\\unpacked\\bug output"
     },
     "Slot2": {
       "commandName": "Project",
-      "commandLineArgs": "slots2 C:\\Users\\MrX13\\AppData\\Local\\BeamNG\\BeamNG.drive\\current\\mods\\unpacked\\bug\\vehicles\\bug slots2"
+      "commandLineArgs": "slots2 C:\\Users\\MrX13\\AppData\\Local\\BeamNG\\BeamNG.drive\\current\\mods\\unpacked\\bug slots2"
     },
     "PriceList": {
       "commandName": "Project",
-      "commandLineArgs": "pricelist C:\\Users\\MrX13\\AppData\\Local\\BeamNG\\BeamNG.drive\\current\\mods\\unpacked\\bug\\vehicles\\bug"
+      "commandLineArgs": "pricelist C:\\Users\\MrX13\\AppData\\Local\\BeamNG\\BeamNG.drive\\current\\mods\\unpacked\\"
     }
   }
 }

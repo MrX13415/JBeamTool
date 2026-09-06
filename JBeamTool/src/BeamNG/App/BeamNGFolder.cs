@@ -25,4 +25,13 @@ public abstract class BeamNGFolder
         => Path.Combine(Root, TranslationsFolderName);
     public static string TranslationsFolderName
         => Path.Combine("locales", "translations");
+
+    public static bool IsLanguageCode(string code)
+    {
+        return code.Length > 2 && code.Length <= 12
+            && code.All(c => (c >= 'a' && c <= 'z') 
+                          || (c >= 'A' && c <= 'Z') 
+                          || (c >= '0' && c <= '9')
+                          || c == '_' || c == '-');
+    }
 }
