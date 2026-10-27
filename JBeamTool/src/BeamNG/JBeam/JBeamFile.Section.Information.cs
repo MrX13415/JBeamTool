@@ -39,7 +39,7 @@ public partial class JBeamFile
 
         public IEnumerable<TranslationKey> GetTranslationKeys()
         {
-            if (!string.IsNullOrEmpty(Name))
+            if (!string.IsNullOrEmpty(Name) && !TranslationKey.IsDynamicTranslation(Name))
             {
                 var key = TranslationKey.New(TranslationKey.InformationName, Name);
                 yield return key;

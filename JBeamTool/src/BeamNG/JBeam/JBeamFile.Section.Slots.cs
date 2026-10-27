@@ -130,7 +130,7 @@ public partial class JBeamFile
         {
             foreach (var slot in Items)
             {
-                if (!string.IsNullOrEmpty(slot.Description))
+                if (!string.IsNullOrEmpty(slot.Description) && !TranslationKey.IsDynamicTranslation(slot.Description))
                 {
                     var key = TranslationKey.New(TranslationKey.SlotDescription, slot.Description);
                     yield return key;

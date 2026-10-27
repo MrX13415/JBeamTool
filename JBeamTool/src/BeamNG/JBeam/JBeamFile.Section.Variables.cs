@@ -68,11 +68,11 @@ public partial class JBeamFile
         {
             foreach (var variable in Items)
             {
-                if (!string.IsNullOrEmpty(variable.Title    ))
+                if (!string.IsNullOrEmpty(variable.Title) && !TranslationKey.IsDynamicTranslation(variable.Title))
                     yield return TranslationKey.New(TranslationKey.VariableTitle, variable.Title);
-                if (!string.IsNullOrEmpty(variable.Category))
+                if (!string.IsNullOrEmpty(variable.Category) && !TranslationKey.IsDynamicTranslation(variable.Category))
                     yield return TranslationKey.New(TranslationKey.VariableCategory, variable.Category);
-                if (!string.IsNullOrEmpty(variable.Description))
+                if (!string.IsNullOrEmpty(variable.Description) && !TranslationKey.IsDynamicTranslation(variable.Description))
                     yield return TranslationKey.New(TranslationKey.VariableDescription, variable.Description);
             }
         }

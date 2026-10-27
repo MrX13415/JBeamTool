@@ -20,9 +20,33 @@ public partial class JBeamFile
         public const string VariableCategory = "ui.vehicleconfig.variables.category.";
         public const string VariableDescription = "ui.vehicleconfig.variables.description.";
 
+        public static string NormalizeLookupText(string text)
+        {
+            if (string.IsNullOrEmpty(text))
+                return string.Empty;
+
+            return text
+                .Replace("\\\"", "\"")
+                .Replace("\\\\", "\\")
+                .Replace("\\n", "\n")
+                .Replace("\\r", "\r")
+                .Replace("\\t", "\t");
+        }
+
+        public static bool IsDynamicTranslation(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+                return false;
+
+            return text.Contains("{{", StringComparison.Ordinal) && text.Contains("}}", StringComparison.Ordinal)
+                || text.Contains("| translate", StringComparison.OrdinalIgnoreCase)
+                || text.Contains("|translate", StringComparison.OrdinalIgnoreCase);
+        }
+
         public static TranslationKey New(string prefix, string str)
         {
-            return new TranslationKey($"{prefix}{str.JsonEscape()}", str.JsonEscape());
+            var normalized = NormalizeLookupText(str);
+            return new TranslationKey($"{prefix}{normalized}", normalized);
         }
 
         public static List<TranslationKey> LoadReference(string langCode = "en-US")
@@ -63,10 +87,15 @@ public partial class JBeamFile
         public static List<TranslationKey> MissingKeys(string langeCode, List<TranslationKey> keys)
         {
             List<TranslationKey> refKeys = LoadReference(langeCode);
+            var referenceKeys = new HashSet<string>(refKeys.Select(k => NormalizeLookupText(k.Key)), StringComparer.Ordinal);
             List<TranslationKey> missingKeys = new();
             foreach (var key in keys)
             {
-                if (!refKeys.Any(k => k.Key == key.Key))
+                var normalizedKey = NormalizeLookupText(key.Key);
+                if (string.IsNullOrWhiteSpace(normalizedKey) || IsDynamicTranslation(normalizedKey))
+                    continue;
+
+                if (!referenceKeys.Contains(normalizedKey))
                 {
                     missingKeys.Add(key);
                 }
