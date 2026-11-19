@@ -29,7 +29,6 @@ JSON format output for integration with CI/CD pipelines and other automation too
 ## Requirements
 
 - .NET 10.0 or later
-- Newtonsoft.Json 13.0.4 or later
 
 ## Installation
 
@@ -332,10 +331,6 @@ dotnet run --project JBeamTool/JBeamTool.csproj -- verify "path/to/file.jbeam" -
 # From built binary (Release)
 .\JBeamTool\bin\Release\net10.0\win-x64\publish\JBeamTool.exe verify "path/to/file.jbeam" --json --strict
 ```
-
-### Dependencies
-
-- **Newtonsoft.Json** (13.0.4) - JSON serialization and deserialization
 
 ---
 
