@@ -344,7 +344,7 @@ For detailed agent workflow instructions, see [AGENTS.md](JBeamTool/AGENTS.md).
 
 ## License
 
-This project is part of the BeamNG VWBug modification package.
+This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
 
 ---
 

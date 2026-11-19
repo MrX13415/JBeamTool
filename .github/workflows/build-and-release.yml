@@ -1,0 +1,93 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '10.0.x'
+    
+    - name: Restore dependencies
+      run: dotnet restore JBeamTool/JBeamTool.csproj
+    
+    - name: Publish Release
+      run: dotnet publish -c Release JBeamTool/JBeamTool.csproj
+    
+    - name: Create release package
+      shell: powershell
+      run: |
+        $version = "${{ github.ref }}" -replace 'refs/tags/v', ''
+        $publishDir = "JBeamTool\bin\Release\net10.0\win-x64\publish"
+        $packageDir = "JBeamTool-${version}"
+        
+        # Create package directory
+        New-Item -ItemType Directory -Path $packageDir -Force | Out-Null
+        
+        # Copy executable from publish output
+        Copy-Item "$publishDir\JBeamTool.exe" -Destination "$packageDir\" -Force
+        
+        # Copy documentation and license from repo root
+        Copy-Item "LICENSE" -Destination "$packageDir\LICENSE" -Force
+        Copy-Item "JBeamTool\AGENTS.md" -Destination "$packageDir\" -Force
+        Copy-Item "README.md" -Destination "$packageDir\" -Force
+        
+        # Create zip archive
+        Compress-Archive -Path $packageDir -DestinationPath "${packageDir}.zip" -Force
+        
+        # Output info
+        Write-Host "Package created: ${packageDir}.zip"
+        Get-Item "${packageDir}.zip" | Select-Object FullName, @{Name="SizeMB";Expression={[math]::Round($_.Length/1MB,2)}}
+        
+        # List package contents
+        Write-Host "`nPackage contents:"
+        Get-ChildItem -Path $packageDir -File | Select-Object Name, @{N="SizeKB";Expression={[math]::Round($_.Length/1KB,2)}}
+    
+    - name: Create Release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Release ${{ github.ref }}
+        body: |
+          ## JBeamTool Release
+          
+          ### Download
+          - **JBeamTool-${{ github.ref_name }}.zip** - Complete package with executable, documentation, and license
+          
+          ### Contents
+          - `JBeamTool.exe` - Command-line executable
+          - `README.md` - User documentation
+          - `AGENTS.md` - Agent workflow documentation
+          - `LICENSE` - MIT License
+          
+          ### Quick Start
+          ```powershell
+          .\JBeamTool.exe verify "C:\path\to\file.jbeam" --json --strict
+          .\JBeamTool.exe keys --json --apply en-US "C:\path\to\mod"
+          ```
+          
+          For detailed usage, see README.md in the package.
+        draft: false
+        prerelease: false
+    
+    - name: Upload Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./JBeamTool-${{ github.ref_name }}.zip
+        asset_name: JBeamTool-${{ github.ref_name }}.zip
+        asset_content_type: application/zip

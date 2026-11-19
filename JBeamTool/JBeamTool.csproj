@@ -5,16 +5,24 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <Version>0.5.0</Version>
+    <AssemblyVersion>0.5.0</AssemblyVersion>
+    <FileVersion>0.5.0</FileVersion>
+    <ProductName>JBeamTool</ProductName>
+    <Authors>MrX13415</Authors>
+    <Description>CLI validator and localization manager for BeamNG JBeam vehicle definition files</Description>
+    <!-- Debug builds: include debug info inline; Release: strip for smaller size -->
+    <DebugType Condition="'$(Configuration)' == 'Release'">none</DebugType>
+    <DebugType Condition="'$(Configuration)' == 'Debug'">embedded</DebugType>
+    <!-- Release: single self-contained executable -->
+    <PublishSingleFile Condition="'$(Configuration)' == 'Release'">true</PublishSingleFile>
+    <SelfContained Condition="'$(Configuration)' == 'Release'">true</SelfContained>
+    <IncludeNativeLibrariesForSelfExtract Condition="'$(Configuration)' == 'Release'">true</IncludeNativeLibrariesForSelfExtract>
+    <PublishTrimmed Condition="'$(Configuration)' == 'Release'">true</PublishTrimmed>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Content Include="AGENTS.md">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
   </ItemGroup>
 
 </Project>
