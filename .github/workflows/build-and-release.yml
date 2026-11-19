@@ -28,7 +28,7 @@ jobs:
     - name: Create release package
       shell: powershell
       run: |
-        $version = "${{ github.ref }}" -replace 'refs/tags/v', ''
+        $version = "${{ github.ref_name }}"
         $publishDir = "JBeamTool\bin\Release\net10.0\win-x64\publish"
         $packageDir = "JBeamTool-${version}"
         
@@ -53,25 +53,15 @@ jobs:
         Get-ChildItem -Path $packageDir -File | Select-Object Name, @{N="SizeKB";Expression={[math]::Round($_.Length/1KB,2)}}
     
     - name: Create Release
-      uses: softprops/action-gh-release@v2
+      uses: softprops/action-gh-release@v3
       with:
         files: JBeamTool-${{ github.ref_name }}.zip
+        generate_release_notes: true
         body: |
-          ## JBeamTool Release
-          
-          ### Download
-          - **JBeamTool-${{ github.ref_name }}.zip** - Complete package with executable, documentation, and license
-          
-          ### Contents
-          - `JBeamTool.exe` - Command-line executable
-          - `README.md` - User documentation
-          - `AGENTS.md` - Agent workflow documentation
-          - `LICENSE` - MIT License
-          
           ### Quick Start
-          ```powershell
-          .\JBeamTool.exe verify "C:\path\to\file.jbeam" --json --strict
-          .\JBeamTool.exe keys --json --apply en-US "C:\path\to\mod"
+          ```
+          JBeamTool.exe verify "C:\path\to\file.jbeam" --json --strict
+          JBeamTool.exe keys --json --apply en-US "C:\path\to\mod"
           ```
           
           For detailed usage, see README.md in the package.
