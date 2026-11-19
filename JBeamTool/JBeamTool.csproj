@@ -20,6 +20,9 @@
     <DebugType Condition="'$(Configuration)' == 'Release'">none</DebugType>
     <!-- Debug: include debug info -->
     <DebugType Condition="'$(Configuration)' == 'Debug'">embedded</DebugType>
+    <!-- Suppress trimming warnings for JSON serialization of anonymous types -->
+    <!-- These are acceptable since we control all serialized types at compile time -->
+    <NoWarn Condition="'$(Configuration)' == 'Release'">$(NoWarn);IL2026;IL2075;IL2087</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
