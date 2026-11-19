@@ -64,6 +64,37 @@ It returns:
 
 This command is intentionally single-file oriented for compact output.
 
+### Find missing localization keys
+
+```bash
+JBeamTool.exe keys [--json] [--apply] [langCode] <sourceDir>
+```
+
+Use this to detect translation keys referenced by JBeam files that are missing from the selected BeamNG language reference.
+
+This is the command to use when preparing localization updates for a mod. It prints the missing key/value pairs in a format that can be copied into the target localization JSON files.
+
+When `--apply` is present, the tool will automatically write the missing entries into the matching locale JSON file(s) under the mod directory. For the default `en-US` workflow, it adds the English source value as the translation, which is the correct value for primary localization entries.
+
+Typical workflow:
+
+```powershell
+& ".\JBeamTool\bin\Debug\net10.0\JBeamTool.exe" keys --json --apply en-US "C:\path\to\mod\vehicles"
+```
+
+Rules:
+
+- Prefer `en-US` as the reference language for new localization entries.
+- `--apply` should be used when the goal is to update the mod’s primary localization file automatically.
+- Use the command before adding new translations to confirm which keys are genuinely missing.
+- Ignore dynamic template values such as `{{ ... | translate }}` because they are not literal translation keys.
+- Do not treat quoted values like `6-Pack "Saft"` as missing simply because the string contains quotes or template syntax.
+- The tool writes the English value back into the locale file for newly missing keys, which makes the primary localization file usable immediately.
+
+This command is the automation entry point for updating localization JSON files for a mod.
+
+If there is no existing locale JSON file under the mod root, the tool will create a fallback file under `locales/en-US/generated_missing_translations.json` and write the new entries there.
+
 ### Expose the parsed JBeam AST
 
 ```bash

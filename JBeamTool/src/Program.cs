@@ -55,46 +55,107 @@ void InitJBeam(string sourceDir)
 
 void Run_Keys()
 {
-    Print();
-    Print($"Report missing translation keys.");
-    Print();
-
-    var args = Environment.GetCommandLineArgs().Skip(2);
+    var args = Environment.GetCommandLineArgs().Skip(2).ToArray();
+    var json = args.Any(arg => arg.Equals("--json", StringComparison.OrdinalIgnoreCase)
+        || arg.Equals("-json", StringComparison.OrdinalIgnoreCase)
+        || arg.Equals("/json", StringComparison.OrdinalIgnoreCase));
+    var apply = args.Any(arg => arg.Equals("--apply", StringComparison.OrdinalIgnoreCase)
+        || arg.Equals("-apply", StringComparison.OrdinalIgnoreCase)
+        || arg.Equals("/apply", StringComparison.OrdinalIgnoreCase));
+    var positional = args.Where(arg => !arg.StartsWith("-") && !arg.StartsWith("/")).ToList();
     string langCode = "en-US";
     string sourceDir = Directory.GetCurrentDirectory();
-    if (args.Count() > 0 && BeamNG.App.BeamNGFolder.IsLanguageCode(args.First()))
+
+    Print();
+    Print($"Report missing translation keys.");
+    if (apply)
+        Print("Apply mode enabled: missing keys will be written into localization JSON files.");
+    Print();
+
+    if (positional.Count > 0 && BeamNG.App.BeamNGFolder.IsLanguageCode(positional.First()))
     {
-        langCode = args.First();
-        args = args.Skip(1);      
+        langCode = positional.First();
+        positional = positional.Skip(1).ToList();
     }
-    if (args.Count() > 0)
+    if (positional.Count > 0)
     {
-        sourceDir = args.First();
-        args = args.Skip(1);
+        sourceDir = positional.First();
+        positional = positional.Skip(1).ToList();
     }
 
     if (!Directory.Exists(sourceDir))
     {
-        Print($"Source directory does not exist: {sourceDir}");
+        if (json)
+        {
+            var missingSourcePayload = new { ok = false, sourceDir, languageCode = langCode, error = "Source directory does not exist." };
+            Print(JsonConvert.SerializeObject(missingSourcePayload, Formatting.Indented));
+        }
+        else
+        {
+            Print($"Source directory does not exist: {sourceDir}");
+        }
+        Environment.ExitCode = 1;
         return;
     }
 
     sourceDir = Path.GetFullPath(sourceDir);
+    var keyList = JBeamFile.LoadFiles(sourceDir);
+    var translationKeys = JBeamFile.TranslationKey.MissingKeys(langCode, keyList);
+    translationKeys.Sort((a, b) => string.Compare(a.Key, b.Key));
+
+    var distinctKeys = translationKeys.Distinct().ToList();
+
+    var filesUpdated = new List<string>();
+    if (apply)
+    {
+        filesUpdated = JBeamFile.TranslationKey.ApplyMissingKeys(langCode, sourceDir, distinctKeys);
+    }
+
+    var resultPayload = new
+    {
+        ok = distinctKeys.Count == 0,
+        languageCode = JBeamFile.TranslationKey.NormalizeLanguageCode(langCode),
+        sourceDir,
+        fileCount = keyList.Count,
+        missingKeyCount = distinctKeys.Count,
+        missingKeys = distinctKeys.Select(k => new { key = k.Key, value = k.Value }).ToList(),
+        applied = apply,
+        updatedFiles = filesUpdated,
+        updatedFileCount = filesUpdated.Count
+    };
+
+    if (json)
+    {
+        Print(JsonConvert.SerializeObject(resultPayload, Formatting.Indented));
+        Environment.ExitCode = resultPayload.ok ? 0 : 1;
+        return;
+    }
+
     Print($"Source: {sourceDir}");
-    Print($"Language Code: {langCode}");
+    Print($"Language Code: {resultPayload.languageCode}");
     Print();
 
     Print("Loading JBeam files...");
     InitJBeam(sourceDir);
-    var jbeams = JBeamFile.LoadFiles(sourceDir);
     Print();
 
-    Print($"Missing Translation Keys in '{langCode}':");
-    var translationKeys = JBeamFile.TranslationKey.MissingKeys(langCode, jbeams);
-    translationKeys.Sort((a, b) => string.Compare(a.Key, b.Key));
-    foreach (var (key, value) in translationKeys.Distinct())
+    Print($"Missing Translation Keys in '{resultPayload.languageCode}':");
+    foreach (var (key, value) in distinctKeys)
     {
         Print($"   \"{key}\": \"{value}\",");
+    }
+
+    if (apply)
+    {
+        Print();
+        if (filesUpdated.Count == 0)
+            Print("No localization files were updated.");
+        else
+        {
+            Print($"Updated {filesUpdated.Count} localization file(s):");
+            foreach (var file in filesUpdated)
+                Print($"   {file}");
+        }
     }
 }
 
