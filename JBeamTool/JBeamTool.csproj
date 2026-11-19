@@ -11,18 +11,18 @@
     <ProductName>JBeamTool</ProductName>
     <Authors>MrX13415</Authors>
     <Description>CLI validator and localization manager for BeamNG JBeam vehicle definition files</Description>
-    <!-- Debug builds: include debug info inline; Release: strip for smaller size -->
-    <DebugType Condition="'$(Configuration)' == 'Release'">none</DebugType>
-    <DebugType Condition="'$(Configuration)' == 'Debug'">embedded</DebugType>
-    <!-- Release: single self-contained executable -->
-    <PublishSingleFile Condition="'$(Configuration)' == 'Release'">true</PublishSingleFile>
-    <SelfContained Condition="'$(Configuration)' == 'Release'">true</SelfContained>
-    <IncludeNativeLibrariesForSelfExtract Condition="'$(Configuration)' == 'Release'">true</IncludeNativeLibrariesForSelfExtract>
+    <!-- Both Debug and Release: single self-contained executable -->
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <!-- Release: strip debug info and trim for smaller size -->
     <PublishTrimmed Condition="'$(Configuration)' == 'Release'">true</PublishTrimmed>
+    <DebugType Condition="'$(Configuration)' == 'Release'">none</DebugType>
+    <!-- Debug: include debug info -->
+    <DebugType Condition="'$(Configuration)' == 'Debug'">embedded</DebugType>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
   </ItemGroup>
 
 </Project>

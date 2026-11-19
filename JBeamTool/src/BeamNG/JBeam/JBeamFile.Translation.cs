@@ -1,6 +1,5 @@
-using Newtonsoft.Json;
+using System.Text.Json;
 using BeamNG.App;
-using Newtonsoft.Json.Linq;
 
 namespace BeamNG.JBeam;
 
@@ -82,11 +81,11 @@ public partial class JBeamFile
                 var fallbackDir = Path.Combine(sourceDir, "locales", NormalizeLanguageCode(langCode));
                 Directory.CreateDirectory(fallbackDir);
                 var fallbackFile = Path.Combine(fallbackDir, "generated_missing_translations.json");
-                var root = new JObject();
-                foreach (var missingKey in missingKeys.Distinct())
-                    root[missingKey.Key] = missingKey.Value;
-
-                File.WriteAllText(fallbackFile, root.ToString(Formatting.Indented));
+                
+                var options = new JsonSerializerOptions { WriteIndented = true };
+                var dict = missingKeys.Distinct().ToDictionary(k => k.Key, k => (object)k.Value);
+                var json = JsonSerializer.Serialize(dict, options);
+                File.WriteAllText(fallbackFile, json);
                 appliedFiles.Add(fallbackFile);
                 return appliedFiles;
             }
@@ -96,24 +95,27 @@ public partial class JBeamFile
                 try
                 {
                     var content = File.ReadAllText(localeFile);
-                    var token = JToken.Parse(content);
-                    if (token is not JObject root)
+                    var options = new JsonSerializerOptions { WriteIndented = true };
+                    var dict = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(content);
+                    
+                    if (dict == null)
                         continue;
 
                     var addedAny = false;
                     foreach (var missingKey in missingKeys.Distinct())
                     {
-                        if (root[missingKey.Key] != null)
+                        if (dict.ContainsKey(missingKey.Key))
                             continue;
 
-                        root[missingKey.Key] = missingKey.Value;
+                        dict[missingKey.Key] = JsonSerializer.SerializeToElement(missingKey.Value);
                         addedAny = true;
                     }
 
                     if (!addedAny)
                         continue;
 
-                    File.WriteAllText(localeFile, root.ToString(Formatting.Indented));
+                    var json = JsonSerializer.Serialize(dict, options);
+                    File.WriteAllText(localeFile, json);
                     appliedFiles.Add(localeFile);
                 }
                 catch (Exception)
@@ -176,14 +178,25 @@ public partial class JBeamFile
                 }
                 var files = Directory.EnumerateFiles(dir, @"*.json", SearchOption.AllDirectories)
                     .Where(f => f.Contains(BeamNGFolder.TranslationsFolderName))
-                    .Where(f => f.Contains(langCode)); // English is the reference language. Keys must be here.
+                    .Where(f => f.Contains(langCode));
 
                 foreach (var file in files)
                 {
-                    var content = File.ReadAllText(file);
-                    var json = JObject.Parse(content);
-                    var fileKeys = json.Properties().Select(p => (key: p.Name, value: p.Value.ToString())).ToArray();
-                    keys.AddRange(fileKeys.Select(k => new TranslationKey(k.key, k.value)));
+                    try
+                    {
+                        var content = File.ReadAllText(file);
+                        var json = JsonSerializer.Deserialize<Dictionary<string, string>>(content);
+                        
+                        if (json != null)
+                        {
+                            foreach (var kvp in json)
+                                keys.Add(new TranslationKey(kvp.Key, kvp.Value));
+                        }
+                    }
+                    catch (Exception)
+                    {
+                        continue;
+                    }
                 }
             }
             return keys;

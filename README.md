@@ -51,8 +51,8 @@ dotnet build -c Release JBeamTool/JBeamTool.csproj
 
 The compiled executable will be located at:
 ```
-JBeamTool/bin/Debug/net10.0/JBeamTool.exe     (Debug build)
-JBeamTool/bin/Release/net10.0/JBeamTool.exe   (Release build)
+JBeamTool/bin/Debug/net10.0/win-x64/publish/JBeamTool.exe     (Debug build)
+JBeamTool/bin/Release/net10.0/win-x64/publish/JBeamTool.exe   (Release build)
 ```
 
 ## Usage
@@ -326,8 +326,11 @@ dotnet build -c Release JBeamTool/JBeamTool.csproj
 # From source
 dotnet run --project JBeamTool/JBeamTool.csproj -- verify "path/to/file.jbeam" --json --strict
 
-# From built binary
-.\JBeamTool\bin\Debug\net10.0\JBeamTool.exe verify "path/to/file.jbeam" --json --strict
+# From built binary (Debug)
+.\JBeamTool\bin\Debug\net10.0\win-x64\publish\JBeamTool.exe verify "path/to/file.jbeam" --json --strict
+
+# From built binary (Release)
+.\JBeamTool\bin\Release\net10.0\win-x64\publish\JBeamTool.exe verify "path/to/file.jbeam" --json --strict
 ```
 
 ### Dependencies
