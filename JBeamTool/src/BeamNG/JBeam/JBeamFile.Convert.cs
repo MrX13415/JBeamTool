@@ -11,23 +11,21 @@ public partial class JBeamFile
         List<string> convertedParts = new();
         ContentLines lines = GetLines();
 
-        foreach (var part in Parts)
+        foreach (var part in Parts.OrderByDescending(part => part.Slots?.Region.Start.Position ?? -1))
         {
-            // No slots or already in Slots2 format, skip
-            if (part.Slots == null /*|| part.Slots.Type == SectionType.Slots2*/) continue;
-            var region = part.Slots.Region;
+            if (part.Slots is not { } slots || !slots.ConvertToSlots2())
+                continue;
 
-            var _format = format with { Indent = lines.GetIndent(region.Start, format.IndentSize) };
-
-            // Convert the lines to Slots2 format
-            var newText = part.Slots.Node.ToString(_format);  // ToString() will output in Slots2 format
-            var newLines = ContentLines.FromString(newText.Str);
-            lines.Set(newLines, region);
+            var region = slots.Region;
+            var sectionFormat = format with { Indent = lines.GetIndent(region.Start, format.IndentSize) };
+            var replacement = slots.Node.ToString(sectionFormat).Str.TrimStart().ReplaceLineEndings(GetLineEndCharacter());
+            FileContent = string.Concat(FileContent.AsSpan(0, region.Start.Position), replacement,
+                FileContent.AsSpan(region.End.Position + 1));
 
             convertedParts.Add(part.Identifier ?? "<unknown>");
         }
 
-        SetLines(lines);
+        convertedParts.Reverse();
         return convertedParts;
     }
 

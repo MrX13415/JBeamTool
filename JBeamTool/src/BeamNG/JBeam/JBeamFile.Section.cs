@@ -45,11 +45,8 @@ public partial class JBeamFile
             if (obj == null) yield break;
             foreach (var kv in obj.Properties)
             {
-                if (kv.Key is KeyNamed key)
-                {
-                    var section = New(new NodeEntry(key, kv.Value));
-                    yield return section;
-                }
+                if (kv.Key is KeyNamed)
+                    yield return New(kv);
             }
         }
     }

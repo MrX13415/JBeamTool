@@ -110,18 +110,66 @@ public partial class JBeamFile
         }
         public ArrayNode? ContentNode => Node.As<ArrayNode>();
 
+        public bool ConvertToSlots2()
+        {
+            if (Type != SectionType.Slots || Node.Key is not KeyNamed key || ContentNode is not { } source ||
+                source.Items.FirstOrDefault(item => !item.IsTrivia()) is not ArrayNode header)
+                return false;
+
+            var typeIndex = header.AsString().ToArray() switch
+            {
+                ["type", "default", "description", ..] => 0,
+                ["name", "type", "default", "description", ..] => 1,
+                _ => -1
+            };
+            if (typeIndex < 0)
+                return false;
+
+            foreach (var row in source.Items.OfType<ArrayNode>())
+            {
+                var column = row.Items.Where(field => !field.IsTrivia()).ElementAtOrDefault(typeIndex);
+                if (column is not ValueNode type)
+                    continue;
+
+                var index = row.Items.IndexOf(type);
+                var replacement = new List<Node>();
+                if (typeIndex == 0)
+                    replacement.Add(row == header ? SlotColumn("name") : type);
+                if (row == header)
+                {
+                    replacement.Add(SlotColumn("allowTypes"));
+                    replacement.Add(SlotColumn("denyTypes"));
+                }
+                else
+                {
+                    var allowedTypes = new ArrayNode();
+                    if (!string.IsNullOrEmpty(type.Value))
+                        allowedTypes.Items.Add(type);
+                    replacement.Add(allowedTypes);
+                    replacement.Add(new ArrayNode());
+                }
+
+                row.Items.RemoveAt(index);
+                row.Items.InsertRange(index, replacement);
+            }
+
+            Node.Key = key with { Name = "slots2" };
+            Items = BuildSlots();
+            return true;
+        }
+
+        private static ValueNode SlotColumn(string name) => new(new Token(TokenType.String, name, new TextLocation(0, 0, 0)));
+
         public List<Slot> BuildSlots()
         {
             List<Slot> slots = new();
             if (ContentNode == null) return slots;
 
-            foreach (var item in ContentNode.Items.Skip(1)) // Skip the header row
+            foreach (var row in ContentNode.Items.OfType<ArrayNode>().Skip(1)) // Skip the header row, not leading trivia
             {
-                if (item is ArrayNode arrayNode)
-                {
-                    var slot = Slot.New(arrayNode);
-                    slots.Add(slot);
-                }
+                var fields = new ArrayNode();
+                fields.Items.AddRange(row.Items.Where(field => !field.IsTrivia()));
+                slots.Add(Slot.New(fields));
             }
             return slots;
         }

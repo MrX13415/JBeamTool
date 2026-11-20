@@ -1,6 +1,9 @@
 namespace JBeamTool;
 
-public record CommandArgs(string[] Positional, bool Json, bool Strict);
+public record CommandArgs(string[] Positional, bool Json, bool Strict)
+{
+    public bool Tree { get; init; }
+}
 
 public static class ArgumentParser
 {
@@ -9,6 +12,7 @@ public static class ArgumentParser
         var positional = new List<string>();
         bool json = false;
         bool strict = false;
+        bool tree = false;
 
         foreach (var arg in args)
         {
@@ -30,12 +34,15 @@ public static class ArgumentParser
                 case "/strict":
                     strict = true;
                     break;
+                case "-tree":
+                    tree = true;
+                    break;
                 default:
                     positional.Add(arg);
                     break;
             }
         }
 
-        return new CommandArgs(positional.ToArray(), json, strict);
+        return new CommandArgs(positional.ToArray(), json, strict) { Tree = tree };
     }
 }

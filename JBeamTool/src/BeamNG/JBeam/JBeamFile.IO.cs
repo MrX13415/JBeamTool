@@ -7,6 +7,8 @@ public partial class JBeamFile
 {
     public delegate void LoadFileEvent(JBeamFile jBeamFile);
     public static event LoadFileEvent? OnLoadFile;
+    public delegate void LoadFilesCompletedEvent(IReadOnlyList<JBeamFile> jBeamFiles);
+    public static event LoadFilesCompletedEvent? OnLoadFilesCompleted;
 
     public bool LoadFile()
     {
@@ -73,6 +75,7 @@ public partial class JBeamFile
         {
             throw new Exception($"Path not found: {path}");
         }
+        OnLoadFilesCompleted?.Invoke(jbeams.AsReadOnly());
         return jbeams;
     }
     public static IEnumerable<string> EnumerateFiles(string directory, SearchOption searchOption = SearchOption.AllDirectories)

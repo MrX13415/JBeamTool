@@ -6,9 +6,6 @@ namespace JBeamTool;
 
 public static class CommandHandlers
 {
-    private static readonly JsonSerializerOptions IndentedJsonOptions = new() { WriteIndented = true };
-    private static readonly JsonSerializerOptions CompactJsonOptions = new() { WriteIndented = false };
-
     public static void Run_Keys(CommandArgs args)
     {
         string langCode = "en-US";
@@ -17,11 +14,14 @@ public static class CommandHandlers
         
         var positional = args.Positional.ToList();
         
-        Console.WriteLine();
-        Console.WriteLine($"Report missing translation keys.");
-        if (apply)
-            Console.WriteLine("Apply mode enabled: missing keys will be written into localization JSON files.");
-        Console.WriteLine();
+        if (!args.Json)
+        {
+            Console.WriteLine();
+            Console.WriteLine("Report missing translation keys.");
+            if (apply)
+                Console.WriteLine("Apply mode enabled: missing keys will be written into localization JSON files.");
+            Console.WriteLine();
+        }
 
         if (positional.Count > 0 && BeamNG.App.BeamNGFolder.IsLanguageCode(positional.First()))
         {
@@ -36,9 +36,9 @@ public static class CommandHandlers
 
         if (!Directory.Exists(sourceDir))
         {
-            var errorPayload = new { ok = false, sourceDir, languageCode = langCode, error = "Source directory does not exist." };
+            var errorPayload = new KeysError(false, sourceDir, langCode, "Source directory does not exist.");
             if (args.Json)
-                Console.WriteLine(JsonSerializer.Serialize(errorPayload, IndentedJsonOptions));
+                Console.WriteLine(JsonSerializer.Serialize(errorPayload, AppJsonSerializationContext.Default.KeysError));
             else
                 Console.WriteLine($"Source directory does not exist: {sourceDir}");
             Environment.ExitCode = 1;
@@ -46,6 +46,15 @@ public static class CommandHandlers
         }
 
         sourceDir = Path.GetFullPath(sourceDir);
+        var languageCode = JBeamFile.TranslationKey.NormalizeLanguageCode(langCode);
+        if (!args.Json)
+        {
+            Console.WriteLine($"Source: {sourceDir}");
+            Console.WriteLine($"Language Code: {languageCode}");
+            Console.WriteLine();
+            Console.WriteLine("Loading JBeam files...");
+            JBeamLoader.InitializeLoader(sourceDir);
+        }
         var keyList = JBeamFile.LoadFiles(sourceDir);
         var translationKeys = JBeamFile.TranslationKey.MissingKeys(langCode, keyList);
         translationKeys.Sort((a, b) => string.Compare(a.Key, b.Key));
@@ -56,33 +65,17 @@ public static class CommandHandlers
         if (apply)
             filesUpdated = JBeamFile.TranslationKey.ApplyMissingKeys(langCode, sourceDir, distinctKeys);
 
-        var resultPayload = new
-        {
-            ok = distinctKeys.Count == 0,
-            languageCode = JBeamFile.TranslationKey.NormalizeLanguageCode(langCode),
-            sourceDir,
-            fileCount = keyList.Count,
-            missingKeyCount = distinctKeys.Count,
-            missingKeys = distinctKeys.Select(k => new { key = k.Key, value = k.Value }).ToList(),
-            applied = apply,
-            updatedFiles = filesUpdated,
-            updatedFileCount = filesUpdated.Count
-        };
-
         if (args.Json)
         {
-            Console.WriteLine(JsonSerializer.Serialize(resultPayload, IndentedJsonOptions));
-            Environment.ExitCode = resultPayload.ok ? 0 : 1;
+            var resultPayload = new KeysResponse(distinctKeys.Count == 0, languageCode, sourceDir, keyList.Count,
+                distinctKeys.Count, distinctKeys.Select(key => new MissingKey(key.Key, key.Value)).ToList(), apply, filesUpdated, filesUpdated.Count);
+            Console.WriteLine(JsonSerializer.Serialize(resultPayload, AppJsonSerializationContext.Default.KeysResponse));
+            Environment.ExitCode = resultPayload.Ok ? 0 : 1;
             return;
         }
 
-        Console.WriteLine($"Source: {sourceDir}");
-        Console.WriteLine($"Language Code: {resultPayload.languageCode}");
         Console.WriteLine();
-        Console.WriteLine("Loading JBeam files...");
-        JBeamLoader.InitializeLoader(sourceDir);
-        Console.WriteLine();
-        Console.WriteLine($"Missing Translation Keys in '{resultPayload.languageCode}':");
+        Console.WriteLine($"Missing Translation Keys in '{languageCode}':");
         
         foreach (var (key, value) in distinctKeys)
             Console.WriteLine($"   \"{key}\": \"{value}\",");
@@ -107,9 +100,9 @@ public static class CommandHandlers
 
         if (!File.Exists(sourcePath) && !Directory.Exists(sourcePath))
         {
-            var errorPayload = new { ok = false, strict = args.Strict, path = sourcePath, error = "Path does not exist." };
+            var errorPayload = new VerifyError(false, args.Strict, sourcePath, "Path does not exist.");
             if (args.Json)
-                Console.WriteLine(JsonSerializer.Serialize(errorPayload, IndentedJsonOptions));
+                Console.WriteLine(JsonSerializer.Serialize(errorPayload, AppJsonSerializationContext.Default.VerifyError));
             else
                 Console.WriteLine($"Source path does not exist: {sourcePath}");
             Environment.ExitCode = 1;
@@ -122,17 +115,16 @@ public static class CommandHandlers
 
         if (files.Length == 0)
         {
-            var emptyPayload = new { ok = false, strict = args.Strict, path = Path.GetFullPath(sourcePath), fileCount = 0, error = "No .jbeam files were found." };
+            var emptyPayload = new VerifyError(false, args.Strict, Path.GetFullPath(sourcePath), "No .jbeam files were found.", 0);
             if (args.Json)
-                Console.WriteLine(JsonSerializer.Serialize(emptyPayload, IndentedJsonOptions));
+                Console.WriteLine(JsonSerializer.Serialize(emptyPayload, AppJsonSerializationContext.Default.VerifyError));
             else
                 Console.WriteLine("No .jbeam files were found.");
             Environment.ExitCode = 1;
             return;
         }
 
-        var results = new List<object>();
-        var ok = true;
+        var results = new List<VerifyFileResult>();
 
         foreach (var file in files)
         {
@@ -140,35 +132,15 @@ public static class CommandHandlers
             var loaded = jbeam.LoadFile();
             var warnings = jbeam.GetWarnings().ToList();
             var fileOk = loaded && (!args.Strict || warnings.Count == 0);
-            if (!fileOk) ok = false;
-
-            results.Add(new
-            {
-                file = jbeam.FilePath,
-                ok = fileOk,
-                parts = jbeam.Parts.Count,
-                sanity = jbeam.Sanity,
-                warnings,
-                translationKeyCount = jbeam.GetTranslationKeys().Count()
-            });
+            results.Add(new VerifyFileResult(jbeam.FilePath, fileOk, jbeam.Parts.Count, jbeam.Sanity, warnings, jbeam.GetTranslationKeys().Count()));
         }
 
-        if (args.Strict)
-            ok = results.All(r => (bool)r.GetType().GetProperty("ok")!.GetValue(r)!);
-
-        var verifyPayload = new
-        {
-            ok,
-            strict = args.Strict,
-            fileCount = files.Length,
-            resultCount = results.Count,
-            results,
-            warnings = results.SelectMany(r => ((IEnumerable<string>)r.GetType().GetProperty("warnings")!.GetValue(r)!)).ToList()
-        };
+        var ok = results.All(result => result.Ok);
+        var verifyPayload = new VerifyResponse(ok, args.Strict, files.Length, results.Count, results, results.SelectMany(result => result.Warnings).ToList());
 
         if (args.Json)
         {
-            Console.WriteLine(JsonSerializer.Serialize(verifyPayload, IndentedJsonOptions));
+            Console.WriteLine(JsonSerializer.Serialize(verifyPayload, AppJsonSerializationContext.Default.VerifyResponse));
         }
         else
         {
@@ -180,16 +152,9 @@ public static class CommandHandlers
 
             foreach (var result in results)
             {
-                var file = (string)result.GetType().GetProperty("file")!.GetValue(result)!;
-                var fileOk = (bool)result.GetType().GetProperty("ok")!.GetValue(result)!;
-                var partCount = (int)result.GetType().GetProperty("parts")!.GetValue(result)!;
-                var warningList = (IEnumerable<string>)result.GetType().GetProperty("warnings")!.GetValue(result)!;
-                var warningCount = warningList.Count();
-                var sanity = (bool)result.GetType().GetProperty("sanity")!.GetValue(result)!;
-
-                var relativePath = Path.GetRelativePath(Path.GetDirectoryName(Path.GetFullPath(sourcePath)) ?? Path.GetFullPath(sourcePath), file);
-                Console.WriteLine($"{relativePath}: {(fileOk ? "OK" : "FAILED")} [parts={partCount}, sanity={sanity}, warnings={warningCount}]");
-                foreach (var warning in warningList)
+                var relativePath = Path.GetRelativePath(Path.GetDirectoryName(Path.GetFullPath(sourcePath)) ?? Path.GetFullPath(sourcePath), result.File);
+                Console.WriteLine($"{relativePath}: {(result.Ok ? "OK" : "FAILED")} [parts={result.Parts}, sanity={result.Sanity}, warnings={result.Warnings.Count}]");
+                foreach (var warning in result.Warnings)
                     Console.WriteLine($"   - {warning}");
             }
         }
@@ -207,9 +172,9 @@ public static class CommandHandlers
             var firstFile = JBeamFile.EnumerateFiles(Path.GetFullPath(targetPath)).FirstOrDefault();
             if (firstFile == null)
             {
-                var errorPayload = new { ok = false, file = targetPath, error = "No .jbeam files found in directory." };
+                var errorPayload = new InfoError(false, targetPath, "No .jbeam files found in directory.");
                 if (args.Json)
-                    Console.WriteLine(JsonSerializer.Serialize(errorPayload, IndentedJsonOptions));
+                    Console.WriteLine(JsonSerializer.Serialize(errorPayload, AppJsonSerializationContext.Default.InfoError));
                 else
                     Console.WriteLine($"No .jbeam files found in directory: {targetPath}");
                 Environment.ExitCode = 1;
@@ -220,9 +185,9 @@ public static class CommandHandlers
 
         if (!File.Exists(targetPath))
         {
-            var errorPayload = new { ok = false, file = targetPath, error = "File does not exist." };
+            var errorPayload = new InfoError(false, targetPath, "File does not exist.");
             if (args.Json)
-                Console.WriteLine(JsonSerializer.Serialize(errorPayload, IndentedJsonOptions));
+                Console.WriteLine(JsonSerializer.Serialize(errorPayload, AppJsonSerializationContext.Default.InfoError));
             else
                 Console.WriteLine($"File does not exist: {targetPath}");
             Environment.ExitCode = 1;
@@ -238,29 +203,14 @@ public static class CommandHandlers
             .OrderBy(g => g.Key)
             .ToDictionary(g => g.Key, g => g.Count());
 
-        var infoPayload = new
-        {
-            ok = loaded,
-            file = jbeam.FilePath,
-            parts = jbeam.Parts.Count,
-            sanity = jbeam.Sanity,
-            warningCount = warnings.Count,
-            warnings,
-            sectionCounts,
-            partsSummary = jbeam.Parts.Select(p => new
-            {
-                id = p.Identifier,
-                name = p.Information?.Name ?? "",
-                value = p.Information?.Value ?? "",
-                authors = p.Information?.Authors?.ToArray() ?? Array.Empty<string>(),
-                slotType = p.SlotType?.Items ?? new List<string>(),
-                slots = p.Slots?.Items.Select(s => s.Name).ToArray() ?? Array.Empty<string>()
-            }).ToList()
-        };
+        var partsSummary = jbeam.Parts.Select(part => new InfoPart(part.Identifier, part.Information?.Name ?? "",
+            part.Information?.Value ?? "", part.Information?.Authors.ToArray() ?? [],
+            part.SlotType?.Items ?? [], part.Slots?.Items.Select(slot => slot.Name).ToArray() ?? [])).ToList();
+        var infoPayload = new InfoResponse(loaded, jbeam.FilePath, jbeam.Parts.Count, jbeam.Sanity, warnings.Count, warnings, sectionCounts, partsSummary);
 
         if (args.Json)
         {
-            Console.WriteLine(JsonSerializer.Serialize(infoPayload, IndentedJsonOptions));
+            Console.WriteLine(JsonSerializer.Serialize(infoPayload, AppJsonSerializationContext.Default.InfoResponse));
         }
         else
         {
@@ -281,13 +231,13 @@ public static class CommandHandlers
                     Console.WriteLine($"   - {kv.Key}: {kv.Value}");
             }
 
-            foreach (var part in infoPayload.partsSummary)
+            foreach (var part in partsSummary)
             {
-                Console.WriteLine($"Part: {part.id} | Name: {part.name} | Value: {part.value}");
-                if (part.slotType.Any())
-                    Console.WriteLine($"   Slot types: {string.Join(", ", part.slotType)}");
-                if (part.slots.Any())
-                    Console.WriteLine($"   Slots: {string.Join(", ", part.slots)}");
+                Console.WriteLine($"Part: {part.Id} | Name: {part.Name} | Value: {part.Value}");
+                if (part.SlotType.Any())
+                    Console.WriteLine($"   Slot types: {string.Join(", ", part.SlotType)}");
+                if (part.Slots.Any())
+                    Console.WriteLine($"   Slots: {string.Join(", ", part.Slots)}");
             }
         }
 
@@ -300,9 +250,9 @@ public static class CommandHandlers
 
         if (!File.Exists(sourcePath) && !Directory.Exists(sourcePath))
         {
-            var errorPayload = new { ok = false, path = sourcePath, error = "Path does not exist." };
+            var errorPayload = new AstError(false, sourcePath, "Path does not exist.");
             if (args.Json)
-                Console.WriteLine(JsonSerializer.Serialize(errorPayload, IndentedJsonOptions));
+                Console.WriteLine(JsonSerializer.Serialize(errorPayload, AppJsonSerializationContext.Default.AstError));
             else
                 Console.WriteLine($"Path does not exist: {sourcePath}");
             Environment.ExitCode = 1;
@@ -315,58 +265,35 @@ public static class CommandHandlers
 
         if (files.Length == 0)
         {
-            var errorPayload = new { ok = false, path = Path.GetFullPath(sourcePath), error = "No .jbeam files were found." };
+            var errorPayload = new AstError(false, Path.GetFullPath(sourcePath), "No .jbeam files were found.");
             if (args.Json)
-                Console.WriteLine(JsonSerializer.Serialize(errorPayload, IndentedJsonOptions));
+                Console.WriteLine(JsonSerializer.Serialize(errorPayload, AppJsonSerializationContext.Default.AstError));
             else
                 Console.WriteLine("No .jbeam files were found.");
             Environment.ExitCode = 1;
             return;
         }
 
-        var summaries = new List<object>();
+        var summaries = new List<AstFile>();
         foreach (var file in files)
         {
             var jbeam = new JBeamFile(file);
             var loaded = jbeam.LoadFile();
-            var parts = jbeam.Parts.Select(part => new
-            {
-                id = part.Identifier,
-                sections = part.Sections.Select(section => new
-                {
-                    type = section.Type.ToString(),
-                    identifier = section.Identifier,
-                    properties = section.Node.Value is ObjectNode sectionObject
-                        ? sectionObject.Properties.Select(entry => new { key = entry.Name, valueType = entry.Value.GetType().Name }).ToList<object>()
-                        : new List<object>()
-                }).ToList(),
-                node = AstDescriber.DescribeNode(part.Object())
-            }).ToList();
+            var parts = jbeam.Parts.Select(part => new AstPart(part.Identifier,
+                part.Sections.Select(section => new AstSection(section.Type.ToString(), section.Identifier,
+                    section.Node.Value is ObjectNode sectionObject
+                        ? sectionObject.Properties.Select(entry => new AstProperty(entry.Name, entry.Value.GetType().Name)).ToList()
+                        : [])).ToList(), AstDescriber.DescribeNode(part.Object()))).ToList();
 
-            var entry = new
-            {
-                ok = loaded,
-                file = jbeam.FilePath,
-                partCount = jbeam.Parts.Count,
-                sanity = jbeam.Sanity,
-                warnings = jbeam.GetWarnings().ToList(),
-                root = AstDescriber.DescribeNode(jbeam.Root),
-                parts
-            };
-
-            summaries.Add(entry);
+            summaries.Add(new AstFile(loaded, jbeam.FilePath, jbeam.Parts.Count, jbeam.Sanity,
+                jbeam.GetWarnings().ToList(), AstDescriber.DescribeNode(jbeam.Root), parts));
         }
 
-        var payloadSummary = new
-        {
-            ok = summaries.All(s => (bool)s.GetType().GetProperty("ok")!.GetValue(s)!),
-            fileCount = files.Length,
-            files = summaries
-        };
+        var payloadSummary = new AstResponse(summaries.All(summary => summary.Ok), files.Length, summaries);
 
         if (args.Json)
         {
-            Console.WriteLine(JsonSerializer.Serialize(payloadSummary, IndentedJsonOptions));
+            Console.WriteLine(JsonSerializer.Serialize(payloadSummary, AppJsonSerializationContext.Default.AstResponse));
         }
         else
         {
@@ -376,28 +303,21 @@ public static class CommandHandlers
 
             foreach (var summary in summaries)
             {
-                var file = (string)summary.GetType().GetProperty("file")!.GetValue(summary)!;
-                var partCount = (int)summary.GetType().GetProperty("partCount")!.GetValue(summary)!;
-                var sanity = (bool)summary.GetType().GetProperty("sanity")!.GetValue(summary)!;
-                var warnings = (List<string>)summary.GetType().GetProperty("warnings")!.GetValue(summary)!;
-
-                Console.WriteLine($"File: {file}");
-                Console.WriteLine($"  Parts: {partCount}");
-                Console.WriteLine($"  Sanity: {sanity}");
-                if (warnings.Count > 0)
+                Console.WriteLine($"File: {summary.File}");
+                Console.WriteLine($"  Parts: {summary.PartCount}");
+                Console.WriteLine($"  Sanity: {summary.Sanity}");
+                if (summary.Warnings.Count > 0)
                 {
                     Console.WriteLine("  Warnings:");
-                    foreach (var warning in warnings)
+                    foreach (var warning in summary.Warnings)
                         Console.WriteLine($"    - {warning}");
                 }
 
-                var root = summary.GetType().GetProperty("root")!.GetValue(summary)!;
-                var rootText = JsonSerializer.Serialize(root, CompactJsonOptions);
-                Console.WriteLine($"  Root: {rootText}");
+                Console.WriteLine($"  Root: {summary.Root.ToJsonString()}");
             }
         }
 
-        Environment.ExitCode = payloadSummary.ok ? 0 : 1;
+        Environment.ExitCode = payloadSummary.Ok ? 0 : 1;
     }
 
     public static void Run_Dump(CommandArgs args)
@@ -491,7 +411,6 @@ public static class CommandHandlers
 
         string sourceDir = args.Positional.Length > 0 ? args.Positional[0] : Directory.GetCurrentDirectory();
         string? targetFile = args.Positional.Length > 1 ? args.Positional[1] : null;
-        bool showTree = Environment.GetCommandLineArgs().Any(s => s.Equals("-tree", StringComparison.OrdinalIgnoreCase));
 
         if (!Directory.Exists(sourceDir))
         {
@@ -516,7 +435,7 @@ public static class CommandHandlers
         var jbeams = JBeamFile.LoadFiles(sourceDir);
         Console.WriteLine();
         
-        string pricelistText = GetPriceList(jbeams, showTree);
+        string pricelistText = GetPriceList(jbeams, args.Tree);
         
         if (targetFile != null)
             File.WriteAllText(targetFile, pricelistText);

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using BeamNG.App;
 
 namespace BeamNG.JBeam;
@@ -82,9 +83,8 @@ public partial class JBeamFile
                 Directory.CreateDirectory(fallbackDir);
                 var fallbackFile = Path.Combine(fallbackDir, "generated_missing_translations.json");
                 
-                var options = new JsonSerializerOptions { WriteIndented = true };
-                var dict = missingKeys.Distinct().ToDictionary(k => k.Key, k => (object)k.Value);
-                var json = JsonSerializer.Serialize(dict, options);
+                var dict = missingKeys.Distinct().ToDictionary(k => k.Key, k => k.Value);
+                var json = JsonSerializer.Serialize(dict, LocalizationJsonContext.Default.StringEntries);
                 File.WriteAllText(fallbackFile, json);
                 appliedFiles.Add(fallbackFile);
                 return appliedFiles;
@@ -95,8 +95,7 @@ public partial class JBeamFile
                 try
                 {
                     var content = File.ReadAllText(localeFile);
-                    var options = new JsonSerializerOptions { WriteIndented = true };
-                    var dict = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(content);
+                    var dict = JsonSerializer.Deserialize(content, LocalizationJsonContext.Default.ElementEntries);
                     
                     if (dict == null)
                         continue;
@@ -107,14 +106,14 @@ public partial class JBeamFile
                         if (dict.ContainsKey(missingKey.Key))
                             continue;
 
-                        dict[missingKey.Key] = JsonSerializer.SerializeToElement(missingKey.Value);
+                        dict[missingKey.Key] = JsonSerializer.SerializeToElement(missingKey.Value, LocalizationJsonContext.Default.String);
                         addedAny = true;
                     }
 
                     if (!addedAny)
                         continue;
 
-                    var json = JsonSerializer.Serialize(dict, options);
+                    var json = JsonSerializer.Serialize(dict, LocalizationJsonContext.Default.ElementEntries);
                     File.WriteAllText(localeFile, json);
                     appliedFiles.Add(localeFile);
                 }
@@ -173,7 +172,7 @@ public partial class JBeamFile
             {
                 if (!Directory.Exists(dir))
                 {
-                    Console.WriteLine($"WARNING: Reference translation directory does not exist: {dir}");
+                    Console.Error.WriteLine($"WARNING: Reference translation directory does not exist: {dir}");
                     continue;
                 }
                 var files = Directory.EnumerateFiles(dir, @"*.json", SearchOption.AllDirectories)
@@ -185,7 +184,7 @@ public partial class JBeamFile
                     try
                     {
                         var content = File.ReadAllText(file);
-                        var json = JsonSerializer.Deserialize<Dictionary<string, string>>(content);
+                        var json = JsonSerializer.Deserialize(content, LocalizationJsonContext.Default.StringEntries);
                         
                         if (json != null)
                         {
@@ -228,3 +227,8 @@ public partial class JBeamFile
 
     }
 }
+
+[JsonSourceGenerationOptions(ReadCommentHandling = JsonCommentHandling.Skip, WriteIndented = true)]
+[JsonSerializable(typeof(Dictionary<string, string>), TypeInfoPropertyName = "StringEntries")]
+[JsonSerializable(typeof(Dictionary<string, JsonElement>), TypeInfoPropertyName = "ElementEntries")]
+internal partial class LocalizationJsonContext : JsonSerializerContext;

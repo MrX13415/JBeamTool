@@ -42,6 +42,7 @@ public record KeyNamed(string Name, TextRegion Region) : Key
 }
 public partial record NodeEntry(Key Key, Node Value)
 {
+    public Key Key { get; set; } = Key;
     public string Name => Key.Named?.Name ?? "";
     public TextRegion Region => new(Key.Named?.Region.Start ?? Value.Region.Start, Value.Region.End);
 

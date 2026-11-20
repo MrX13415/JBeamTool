@@ -13,5 +13,9 @@ public static class JBeamLoader
             foreach (var warning in jbeam.GetWarnings())
                 Console.WriteLine($"      Warning: {warning}");
         };
+        JBeamFile.OnLoadFilesCompleted += (jbeams) =>
+        {
+            Console.WriteLine($"Loaded {jbeams.Count} JBeam files.");
+        };
     }
 }
