@@ -110,6 +110,34 @@ public partial class JBeamFile
         }
         public ArrayNode? ContentNode => Node.As<ArrayNode>();
 
+        public List<Slot> BuildSlots()
+        {
+            List<Slot> slots = new();
+            if (ContentNode == null) return slots;
+
+            foreach (var row in ContentNode.Items.OfType<ArrayNode>().Skip(1)) // Skip the header row, not leading trivia
+            {
+                var fields = new ArrayNode();
+                fields.Items.AddRange(row.Items.Where(field => !field.IsTrivia()));
+                slots.Add(Slot.New(fields));
+            }
+            return slots;
+        }
+
+        public bool IsTypeSlots2 => Type == SectionType.Slots2;
+
+        public IEnumerable<TranslationKey> GetTranslationKeys()
+        {
+            foreach (var slot in Items)
+            {
+                if (!string.IsNullOrEmpty(slot.Description) && !TranslationKey.IsDynamicTranslation(slot.Description))
+                {
+                    var key = TranslationKey.New(TranslationKey.SlotDescription, slot.Description);
+                    yield return key;
+                }
+            }
+        }
+
         public bool ConvertToSlots2()
         {
             if (Type != SectionType.Slots || Node.Key is not KeyNamed key || ContentNode is not { } source ||
@@ -157,34 +185,7 @@ public partial class JBeamFile
             Items = BuildSlots();
             return true;
         }
-
         private static ValueNode SlotColumn(string name) => new(new Token(TokenType.String, name, new TextLocation(0, 0, 0)));
-
-        public List<Slot> BuildSlots()
-        {
-            List<Slot> slots = new();
-            if (ContentNode == null) return slots;
-
-            foreach (var row in ContentNode.Items.OfType<ArrayNode>().Skip(1)) // Skip the header row, not leading trivia
-            {
-                var fields = new ArrayNode();
-                fields.Items.AddRange(row.Items.Where(field => !field.IsTrivia()));
-                slots.Add(Slot.New(fields));
-            }
-            return slots;
-        }
-
-        public IEnumerable<TranslationKey> GetTranslationKeys()
-        {
-            foreach (var slot in Items)
-            {
-                if (!string.IsNullOrEmpty(slot.Description) && !TranslationKey.IsDynamicTranslation(slot.Description))
-                {
-                    var key = TranslationKey.New(TranslationKey.SlotDescription, slot.Description);
-                    yield return key;
-                }
-            }
-        }
 
     }
 }
